@@ -33,6 +33,7 @@ export interface EspnEvent {
   date: string;
   name: string;
   shortName: string;
+  season?: { year: number; type: number; slug: string };
   status: {
     clock?: number;
     displayClock?: string;
@@ -97,10 +98,83 @@ export function useScoreboard(dates?: string) {
 
 // ─── Standings ────────────────────────────────────────────────────────────────
 
+const SEASON = 2026;
+const GROUP_LETTERS = 'ABCDEFGHIJKL';
+// The tournament spans these dates; the default scoreboard only returns the
+// current day's matches, so we request the full range to see every team/match.
+const TOURNAMENT_RANGE = '20260611-20260719';
+
+function teamIdFromRef(ref: string): string {
+  const m = /teams\/(\d+)/.exec(ref ?? '');
+  return m ? m[1] : '';
+}
+
+// ESPN's public `/standings` endpoint is empty for fifa.world; the real group
+// tables live in the core API, one standings resource per group, with teams
+// referenced by $ref. We resolve those refs against a team lookup built from
+// the tournament scoreboard (the `/teams` endpoint lacks CORS headers, which
+// breaks the web preview, whereas the scoreboard sends `allow-origin: *` and
+// its competitors already cover all 48 nations).
 export function useStandings() {
   return useQuery<{ children: EspnGroup[] }>({
-    queryKey: ['standings'],
-    queryFn: () => espnFetch(`${ESPN_BASE}/standings`),
+    queryKey: ['standings', SEASON],
+    queryFn: async () => {
+      const sb = await espnFetch(`${ESPN_BASE}/scoreboard?dates=${TOURNAMENT_RANGE}&limit=400`);
+      const teamMap = new Map<string, EspnTeam>();
+      for (const ev of (sb.events ?? []) as EspnEvent[]) {
+        for (const c of ev.competitions?.[0]?.competitors ?? []) {
+          const tm = c.team;
+          if (tm?.id && !teamMap.has(tm.id)) {
+            teamMap.set(tm.id, {
+              id: tm.id,
+              displayName: tm.displayName,
+              abbreviation: tm.abbreviation,
+              logo: tm.logo ?? '',
+              color: tm.color,
+            });
+          }
+        }
+      }
+
+      const groupIds = Array.from({ length: 12 }, (_, i) => i + 1);
+      const results = await Promise.all(
+        groupIds.map(async (gid): Promise<EspnGroup | null> => {
+          try {
+            const st = await espnFetch(
+              `${ESPN_CORE}/seasons/${SEASON}/types/1/groups/${gid}/standings/0`
+            );
+            const entries: EspnStandingEntry[] = (st.standings ?? []).map((e: any) => {
+              const id = teamIdFromRef(e.team?.$ref ?? '');
+              const team =
+                teamMap.get(id) ?? { id, displayName: '', abbreviation: '', logo: '' };
+              const stats = e.records?.[0]?.stats ?? [];
+              return { team, stats };
+            });
+            entries.sort((a, b) => {
+              const ra = Number(a.stats.find((s) => s.name === 'rank')?.value ?? 99);
+              const rb = Number(b.stats.find((s) => s.name === 'rank')?.value ?? 99);
+              return ra - rb;
+            });
+            if (entries.length === 0) return null;
+            const letter = GROUP_LETTERS[gid - 1] ?? String(gid);
+            return {
+              name: `Group ${letter}`,
+              abbreviation: `Group ${letter}`,
+              standings: { entries },
+            };
+          } catch {
+            return null;
+          }
+        })
+      );
+
+      const children = results.filter((g): g is EspnGroup => g != null);
+      // If every group fetch failed, treat it as an error rather than silently
+      // showing an empty "not available yet" state.
+      if (children.length === 0) throw new Error('Failed to load group standings');
+      children.sort((a, b) => a.name.localeCompare(b.name));
+      return { children };
+    },
     staleTime: 60_000,
   });
 }
@@ -122,75 +196,42 @@ export interface BracketRound {
   events: EspnEvent[];
 }
 
-const KNOCKOUT_ROUND_NAMES = [
-  'Round of 32',
-  'Round of 16',
-  'Quarterfinal',
-  'Semifinal',
-  '3rd Place',
-  'Final',
-] as const;
-
-/** Returns the canonical knockout-round name for a match, or null if it is a group-stage match. */
-function classifyKnockoutRound(ev: EspnEvent): string | null {
-  // ESPN embeds round info in competition notes with type === 'event'
-  const notes = ev.competitions?.[0]?.notes ?? [];
-  const note = (notes as { type: string; headline?: string }[]).find(n => n.type === 'event');
-  const headline = note?.headline ?? '';
-
-  // Try to match the headline to a known knockout round
-  for (const round of KNOCKOUT_ROUND_NAMES) {
-    if (headline.toLowerCase().includes(round.toLowerCase())) return round;
-  }
-
-  // Fall back to deriving from event name only if no headline is provided
-  // AND if the event name strongly implies a knockout round (not a group match).
-  const name = (ev.name ?? '').toLowerCase();
-
-  // Group-stage matches typically include "group" in the name or have a
-  // competition note of type "group". Exclude them explicitly.
-  const hasGroupNote = (notes as { type: string }[]).some(n => n.type === 'group');
-  if (hasGroupNote) return null;
-  if (name.includes('group ')) return null;
-
-  for (const round of KNOCKOUT_ROUND_NAMES) {
-    if (name.includes(round.toLowerCase())) return round;
-  }
-
-  // Unable to classify — exclude from bracket rather than showing garbage
-  return null;
-}
+// Each event carries `season.slug` identifying its round. Ordered outermost
+// (most teams) first so the circular bracket renders correctly; the 3rd-place
+// match is last so it appears in the list view but not the bracket tree.
+const KNOCKOUT_ROUNDS: { slug: string; name: string }[] = [
+  { slug: 'round-of-32', name: 'Round of 32' },
+  { slug: 'round-of-16', name: 'Round of 16' },
+  { slug: 'quarterfinals', name: 'Quarterfinals' },
+  { slug: 'semifinals', name: 'Semifinals' },
+  { slug: 'final', name: 'Final' },
+  { slug: '3rd-place-match', name: '3rd Place' },
+];
 
 export function useBracket() {
   return useQuery<{ rounds: BracketRound[] }>({
     queryKey: ['bracket'],
     queryFn: async () => {
-      const data = await espnFetch(`${ESPN_BASE}/scoreboard?limit=200`);
+      const data = await espnFetch(
+        `${ESPN_BASE}/scoreboard?dates=${TOURNAMENT_RANGE}&limit=400`
+      );
       const events: EspnEvent[] = data.events ?? [];
 
-      const roundMap: Record<string, EspnEvent[]> = {};
-
+      const bySlug: Record<string, EspnEvent[]> = {};
       for (const ev of events) {
-        const roundName = classifyKnockoutRound(ev);
-        if (!roundName) continue; // skip group-stage and unclassified events
-        if (!roundMap[roundName]) roundMap[roundName] = [];
-        roundMap[roundName].push(ev);
+        const slug = ev.season?.slug ?? '';
+        if (!slug || slug === 'group-stage') continue;
+        (bySlug[slug] ??= []).push(ev);
       }
 
-      const rounds: BracketRound[] = Object.entries(roundMap)
-        .map(([name, evs]) => ({ name, events: evs }))
-        .sort((a, b) => {
-          const ai = KNOCKOUT_ROUND_NAMES.findIndex(r =>
-            a.name.toLowerCase().includes(r.toLowerCase())
-          );
-          const bi = KNOCKOUT_ROUND_NAMES.findIndex(r =>
-            b.name.toLowerCase().includes(r.toLowerCase())
-          );
-          if (ai === -1 && bi === -1) return 0;
-          if (ai === -1) return 1;
-          if (bi === -1) return -1;
-          return ai - bi;
-        });
+      const rounds: BracketRound[] = KNOCKOUT_ROUNDS.filter(
+        (k) => bySlug[k.slug]?.length
+      ).map((k) => ({
+        name: k.name,
+        events: bySlug[k.slug].sort(
+          (a, b) => new Date(a.date).getTime() - new Date(b.date).getTime()
+        ),
+      }));
 
       return { rounds };
     },
@@ -246,5 +287,7 @@ export function getStatusLabel(event: EspnEvent): string {
 
 export function getGroupLabel(event: EspnEvent): string {
   const note = event.competitions?.[0]?.notes?.find(n => n.type === 'event');
-  return note?.headline ?? '';
+  if (note?.headline) return note.headline;
+  const slug = event.season?.slug;
+  return KNOCKOUT_ROUNDS.find(k => k.slug === slug)?.name ?? '';
 }

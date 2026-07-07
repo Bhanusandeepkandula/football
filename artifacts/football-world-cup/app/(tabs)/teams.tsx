@@ -12,6 +12,7 @@ import {
   Platform,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { router } from 'expo-router';
 import { useColors } from '@/hooks/useColors';
 import { useTeams, EspnFullTeam } from '@/hooks/useWorldCup';
 import { Feather } from '@expo/vector-icons';
@@ -118,7 +119,9 @@ function TeamCard({ team, colors }: { team: EspnFullTeam; colors: ReturnType<typ
   const accent = team.color ? `#${team.color}` : colors.secondary;
 
   return (
-    <View
+    <TouchableOpacity
+      activeOpacity={0.7}
+      onPress={() => router.push(`/team/${team.id}` as any)}
       style={[
         styles.teamCard,
         {
@@ -140,7 +143,7 @@ function TeamCard({ team, colors }: { team: EspnFullTeam; colors: ReturnType<typ
       <Text style={[styles.teamAbbr, { color: colors.mutedForeground }]}>
         {team.abbreviation}
       </Text>
-    </View>
+    </TouchableOpacity>
   );
 }
 

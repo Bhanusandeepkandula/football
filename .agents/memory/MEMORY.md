@@ -1,1 +1,2 @@
 - [ESPN soccer summary API shape](espn-soccer-summary-api.md) — lineups live in `rosters` (not boxscore.players), events in `keyEvents` (not plays); stats use ESPN-specific names.
+- [ESPN soccer data sources & CORS](espn-soccer-data-sources.md) — groups in core API per-group, bracket needs date-range scoreboard classified by season.slug; `/teams` & `/roster` lack CORS (web preview only).
