@@ -28,6 +28,8 @@ import {
 } from 'lucide-react-native';
 import { useColors } from '@/hooks/useColors';
 import { useMatchDetail, MatchPlayer, MatchEvent } from '@/hooks/useMatchDetail';
+import { useLiveClock } from '@/hooks/useLiveClock';
+import { font, KICKER_SPACING } from '@/constants/typography';
 import { FormationPitch } from '@/components/FormationPitch';
 import { MatchTimeline } from '@/components/MatchTimeline';
 import { EventsTimeline } from '@/components/EventsTimeline';
@@ -59,6 +61,11 @@ export default function MatchDetailScreen() {
   const insets = useSafeAreaInsets();
   const [activeTab, setActiveTab] = useState<Tab>('overview');
   const { data, isLoading, isError, refetch } = useMatchDetail(id);
+  const live = useLiveClock(
+    data?.displayClock,
+    data?.clockRunning ?? false,
+    `${data?.displayClock ?? ''}|${data?.period ?? ''}|${data?.status ?? ''}`,
+  );
 
   const topPad = Platform.OS === 'web' ? Math.max(insets.top, 67) : insets.top;
   const homeColor = `#${data?.homeTeam?.color ?? '003DA5'}`;
@@ -71,7 +78,7 @@ export default function MatchDetailScreen() {
         <TouchableOpacity onPress={() => router.back()} style={styles.backBtn} hitSlop={12}>
           <ChevronLeft size={26} color={colors.foreground} strokeWidth={2.4} />
         </TouchableOpacity>
-        <Text style={[styles.headerTitle, { color: colors.foreground }]}>Match Centre</Text>
+        <Text style={[styles.headerTitle, { color: colors.foreground }]}>MATCH CENTRE</Text>
         <View style={{ width: 40 }} />
       </View>
 
@@ -90,52 +97,56 @@ export default function MatchDetailScreen() {
       ) : (
         <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: insets.bottom + 40 }}>
           {/* Score hero */}
-          <Animated.View entering={FadeIn.duration(400)} style={[styles.hero, { backgroundColor: colors.card, borderColor: colors.separator }]}>
-            {data.round ? (
-              <Text style={[styles.roundText, { color: colors.mutedForeground }]}>{data.round.toUpperCase()}</Text>
-            ) : null}
+          {(() => {
+            const so = data.shootout;
+            const homeWinner = data.isFinished && (so ? so.home > so.away : Number(data.homeTeam.score) > Number(data.awayTeam.score));
+            const awayWinner = data.isFinished && (so ? so.away > so.home : Number(data.awayTeam.score) > Number(data.homeTeam.score));
+            return (
+              <Animated.View entering={FadeIn.duration(400)} style={[styles.hero, { backgroundColor: colors.card, borderColor: colors.hairline }]}>
+                {data.round ? (
+                  <Text style={[styles.roundText, { color: colors.primary }]}>{data.round.toUpperCase()}</Text>
+                ) : null}
 
-            {/* Status */}
-            <View style={styles.heroStatus}>
-              {data.isLive ? (
-                <View style={[styles.livePill, { backgroundColor: colors.live }]}>
-                  <View style={styles.liveDot} />
-                  <Text style={styles.livePillText}>{data.statusDetail}</Text>
+                {/* Status */}
+                <View style={styles.heroStatus}>
+                  {data.isLive ? (
+                    <View style={[styles.livePill, { backgroundColor: colors.live }]}>
+                      <View style={styles.liveDot} />
+                      <Text style={styles.livePillText}>{live.minute ?? data.statusDetail ?? 'LIVE'}</Text>
+                    </View>
+                  ) : (
+                    <Text style={[styles.statusText, { color: data.isFinished ? colors.mutedForeground : colors.primary }]}>
+                      {data.isFinished ? 'FULL TIME' : (data.statusDetail || 'SCHEDULED').toUpperCase()}
+                    </Text>
+                  )}
                 </View>
-              ) : (
-                <Text style={[styles.statusText, { color: data.isFinished ? colors.mutedForeground : colors.primary }]}>
-                  {data.isFinished ? 'Full Time' : data.statusDetail}
-                </Text>
-              )}
-            </View>
 
-            {/* Teams + score */}
-            <View style={styles.scoreRow}>
-              <TeamHero
-                name={data.homeTeam.displayName}
-                logo={data.homeTeam.logo}
-                color={homeColor}
-                winner={data.isFinished && Number(data.homeTeam.score) > Number(data.awayTeam.score)}
-              />
-              <View style={styles.scoreCenter}>
-                <Text style={[styles.scoreBig, { color: colors.foreground }]}>{data.homeTeam.score}</Text>
-                <Text style={[styles.scoreSep, { color: colors.mutedForeground }]}>–</Text>
-                <Text style={[styles.scoreBig, { color: colors.foreground }]}>{data.awayTeam.score}</Text>
-              </View>
-              <TeamHero
-                name={data.awayTeam.displayName}
-                logo={data.awayTeam.logo}
-                color={awayColor}
-                winner={data.isFinished && Number(data.awayTeam.score) > Number(data.homeTeam.score)}
-              />
-            </View>
+                {/* Teams + score */}
+                <View style={styles.scoreRow}>
+                  <TeamHero name={data.homeTeam.displayName} logo={data.homeTeam.logo} color={homeColor} winner={homeWinner} />
+                  <View style={styles.scoreCenter}>
+                    <View style={styles.scoreLine}>
+                      <Text style={[styles.scoreBig, { color: homeWinner || !data.isFinished ? colors.foreground : colors.mutedForeground }]}>{data.homeTeam.score}</Text>
+                      <Text style={[styles.scoreSep, { color: colors.mutedForeground }]}>–</Text>
+                      <Text style={[styles.scoreBig, { color: awayWinner || !data.isFinished ? colors.foreground : colors.mutedForeground }]}>{data.awayTeam.score}</Text>
+                    </View>
+                    {so ? (
+                      <Text style={[styles.penLine, { color: colors.mutedForeground }]}>{so.home}–{so.away} ON PENALTIES</Text>
+                    ) : data.resultSuffix === 'AET' ? (
+                      <Text style={[styles.penLine, { color: colors.mutedForeground }]}>AFTER EXTRA TIME</Text>
+                    ) : null}
+                  </View>
+                  <TeamHero name={data.awayTeam.displayName} logo={data.awayTeam.logo} color={awayColor} winner={awayWinner} />
+                </View>
 
-            {/* Color bar */}
-            <View style={styles.colorBar}>
-              <View style={[styles.colorBarSeg, { backgroundColor: homeColor }]} />
-              <View style={[styles.colorBarSeg, { backgroundColor: awayColor }]} />
-            </View>
-          </Animated.View>
+                {/* Color bar */}
+                <View style={styles.colorBar}>
+                  <View style={[styles.colorBarSeg, { backgroundColor: homeColor }]} />
+                  <View style={[styles.colorBarSeg, { backgroundColor: awayColor }]} />
+                </View>
+              </Animated.View>
+            );
+          })()}
 
           {/* Tab selector (iOS segmented control) */}
           <Animated.View entering={FadeInDown.delay(80).duration(350)} style={styles.tabBarWrap}>
@@ -428,7 +439,7 @@ const styles = StyleSheet.create({
     paddingBottom: 12,
   },
   backBtn: { width: 40, height: 40, alignItems: 'center', justifyContent: 'center' },
-  headerTitle: { fontSize: 17, fontFamily: 'Nunito_700Bold' },
+  headerTitle: { fontSize: 17, fontFamily: font.displaySemi, letterSpacing: 1.2 },
   centered: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 12, minHeight: 200, paddingVertical: 40 },
   loadingText: { fontSize: 14, fontFamily: 'Nunito_400Regular', marginTop: 8 },
   errorText: { fontSize: 15, fontFamily: 'Nunito_400Regular' },
@@ -447,27 +458,29 @@ const styles = StyleSheet.create({
   },
   roundText: {
     textAlign: 'center',
-    fontSize: 11,
-    fontFamily: 'Nunito_700Bold',
-    letterSpacing: 1.2,
-    paddingTop: 14,
+    fontSize: 12,
+    fontFamily: font.displayMed,
+    letterSpacing: KICKER_SPACING,
+    paddingTop: 16,
   },
   heroStatus: { alignItems: 'center', paddingTop: 8, paddingBottom: 4 },
-  livePill: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 12, paddingVertical: 4, borderRadius: 20, gap: 6 },
+  livePill: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 12, paddingVertical: 4, borderRadius: 8, gap: 6 },
   liveDot: { width: 7, height: 7, borderRadius: 3.5, backgroundColor: '#fff' },
-  livePillText: { color: '#fff', fontSize: 12, fontFamily: 'Nunito_700Bold' },
-  statusText: { fontSize: 13, fontFamily: 'Nunito_600SemiBold' },
+  livePillText: { color: '#fff', fontSize: 13, fontFamily: font.displaySemi, letterSpacing: 0.8 },
+  statusText: { fontSize: 13, fontFamily: font.displayMed, letterSpacing: 1 },
 
-  scoreRow: { flexDirection: 'row', alignItems: 'flex-start', paddingHorizontal: 16, paddingTop: 8, paddingBottom: 16, gap: 8 },
-  teamHero: { flex: 1, alignItems: 'center', gap: 8 },
-  teamHeroLogo: { width: 60, height: 60, borderRadius: 30 },
-  teamHeroLogoPlaceholder: { width: 60, height: 60, borderRadius: 30 },
-  teamHeroName: { fontSize: 14, fontFamily: 'Nunito_700Bold', textAlign: 'center' },
+  scoreRow: { flexDirection: 'row', alignItems: 'flex-start', paddingHorizontal: 16, paddingTop: 10, paddingBottom: 18, gap: 8 },
+  teamHero: { flex: 1, alignItems: 'center', gap: 10 },
+  teamHeroLogo: { width: 64, height: 64, borderRadius: 32 },
+  teamHeroLogoPlaceholder: { width: 64, height: 64, borderRadius: 32 },
+  teamHeroName: { fontSize: 15, fontFamily: font.displaySemi, letterSpacing: 0.4, textTransform: 'uppercase', textAlign: 'center' },
   winnerRow: { flexDirection: 'row', alignItems: 'center', gap: 3 },
-  winnerText: { fontSize: 10, fontFamily: 'Nunito_700Bold', letterSpacing: 0.5 },
-  scoreCenter: { alignItems: 'center', flexDirection: 'row', gap: 4, paddingHorizontal: 8, paddingTop: 8 },
-  scoreBig: { fontSize: 44, fontFamily: 'Nunito_800ExtraBold', lineHeight: 50 },
-  scoreSep: { fontSize: 26, fontFamily: 'Nunito_400Regular', paddingHorizontal: 2 },
+  winnerText: { fontSize: 10, fontFamily: font.displaySemi, letterSpacing: 1 },
+  scoreCenter: { alignItems: 'center', paddingHorizontal: 8, paddingTop: 6 },
+  scoreLine: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  scoreBig: { fontSize: 48, fontFamily: font.displayBold, lineHeight: 52 },
+  scoreSep: { fontSize: 26, fontFamily: font.displayLight, paddingHorizontal: 2 },
+  penLine: { fontSize: 11, fontFamily: font.displayMed, letterSpacing: 1, marginTop: 6 },
 
   colorBar: { flexDirection: 'row', height: 4 },
   colorBarSeg: { flex: 1 },
@@ -478,9 +491,9 @@ const styles = StyleSheet.create({
   // Section
   section: { marginBottom: 20 },
   sectionTitle: {
-    fontSize: 12,
-    fontFamily: 'Nunito_700Bold',
-    letterSpacing: 0.6,
+    fontSize: 13,
+    fontFamily: font.displaySemi,
+    letterSpacing: KICKER_SPACING,
     paddingHorizontal: 20,
     paddingBottom: 8,
   },

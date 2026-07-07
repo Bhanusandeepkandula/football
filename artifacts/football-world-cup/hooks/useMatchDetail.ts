@@ -8,6 +8,30 @@ async function espnFetch(url: string) {
   return res.json();
 }
 
+// Any status where the match is actively being played (regulation, ET or the
+// shootout) — used to drive the live clock and live styling.
+const LIVE_DETAIL_STATUSES = new Set([
+  'STATUS_IN_PROGRESS',
+  'STATUS_HALFTIME',
+  'STATUS_END_PERIOD',
+  'STATUS_FIRST_HALF',
+  'STATUS_SECOND_HALF',
+  'STATUS_OVERTIME',
+  'STATUS_EXTRA_TIME',
+  'STATUS_EXTRA_TIME_HALFTIME',
+  'STATUS_SHOOTOUT',
+]);
+
+// Statuses where the ball is actually in play — the live clock only ticks for
+// these (halftime, end-of-period and the shootout are paused states).
+const RUNNING_STATUSES = new Set([
+  'STATUS_IN_PROGRESS',
+  'STATUS_FIRST_HALF',
+  'STATUS_SECOND_HALF',
+  'STATUS_OVERTIME',
+  'STATUS_EXTRA_TIME',
+]);
+
 export interface MatchPlayer {
   id: string;
   displayName: string;
@@ -55,12 +79,17 @@ export interface MatchStat {
 
 export interface MatchDetail {
   id: string;
-  homeTeam: { id: string; displayName: string; logo: string; score: string; color: string };
-  awayTeam: { id: string; displayName: string; logo: string; score: string; color: string };
+  homeTeam: { id: string; displayName: string; logo: string; score: string; color: string; shootout?: number };
+  awayTeam: { id: string; displayName: string; logo: string; score: string; color: string; shootout?: number };
   status: string;
   statusDetail: string;
   isLive: boolean;
   isFinished: boolean;
+  clockRunning: boolean;
+  period?: number;
+  displayClock?: string;
+  resultSuffix?: string; // 'AET' | 'Pens' | ''
+  shootout?: { home: number; away: number } | null;
   venue?: string;
   city?: string;
   date: string;
@@ -168,6 +197,18 @@ export function useMatchDetail(eventId: string) {
       const home = competitors.find((c: any) => c.homeAway === 'home') ?? competitors[0];
       const away = competitors.find((c: any) => c.homeAway === 'away') ?? competitors[1];
       const statusType = header?.status?.type ?? {};
+      const period: number = header?.status?.period ?? 0;
+      const displayClock: string = header?.status?.displayClock ?? '';
+
+      // Extra time / penalty shootout result.
+      const homeSo = typeof home?.shootoutScore === 'number' ? home.shootoutScore : undefined;
+      const awaySo = typeof away?.shootoutScore === 'number' ? away.shootoutScore : undefined;
+      const shootout = homeSo != null && awaySo != null ? { home: homeSo, away: awaySo } : null;
+      const resultSuffix = shootout || statusType.name === 'STATUS_FINAL_PEN' || statusType.name === 'STATUS_SHOOTOUT'
+        ? 'Pens'
+        : statusType.completed && period > 2
+          ? 'AET'
+          : '';
 
       // ── Match meta (round, venue, referee, attendance) ────────────────────
       const gameInfo = data.gameInfo ?? {};
@@ -320,6 +361,35 @@ export function useMatchDetail(eventId: string) {
         }];
       });
 
+      // ── Derived accuracy percentages ──────────────────────────────────────
+      // ESPN gives raw counts (shots, shots on target, passes, accurate passes)
+      // but no accuracy %. Compute them so fans see conversion, not just volume.
+      const rawStat = (arr: any[], key: string): number => {
+        const s = arr.find((x: any) => x.name === key || x.abbreviation === key);
+        return s ? parseFloat(s.displayValue ?? String(s.value ?? '0')) || 0 : 0;
+      };
+      const addAccuracy = (afterKey: string, name: string, label: string, madeKey: string, totalKey: string) => {
+        const hMade = rawStat(homeStats, madeKey);
+        const hTot = rawStat(homeStats, totalKey);
+        const aMade = rawStat(awayStats, madeKey);
+        const aTot = rawStat(awayStats, totalKey);
+        if (hTot <= 0 || aTot <= 0) return;
+        const hPct = Math.round((hMade / hTot) * 100);
+        const aPct = Math.round((aMade / aTot) * 100);
+        const entry: MatchStat = {
+          name,
+          displayName: label,
+          homeValue: `${hPct}%`,
+          awayValue: `${aPct}%`,
+          homePercent: hPct + aPct > 0 ? (hPct / (hPct + aPct)) * 100 : 50,
+        };
+        const idx = stats.findIndex((s) => s.name === afterKey);
+        if (idx >= 0) stats.splice(idx + 1, 0, entry);
+        else stats.push(entry);
+      };
+      addAccuracy('shotsOnTarget', 'shotAccuracy', 'Shot Accuracy', 'shotsOnTarget', 'totalShots');
+      addAccuracy('accuratePasses', 'passAccuracy', 'Pass Accuracy', 'accuratePasses', 'totalPasses');
+
       return {
         id: eventId,
         homeTeam: {
@@ -328,6 +398,7 @@ export function useMatchDetail(eventId: string) {
           logo: home?.team?.logos?.[0]?.href ?? home?.team?.logo ?? '',
           score: home?.score ?? '0',
           color: home?.team?.color ?? '003DA5',
+          shootout: homeSo,
         },
         awayTeam: {
           id: away?.team?.id ?? '',
@@ -335,11 +406,17 @@ export function useMatchDetail(eventId: string) {
           logo: away?.team?.logos?.[0]?.href ?? away?.team?.logo ?? '',
           score: away?.score ?? '0',
           color: away?.team?.color ?? 'C8102E',
+          shootout: awaySo,
         },
         status: statusType.name ?? '',
         statusDetail: statusType.shortDetail ?? '',
-        isLive: statusType.name === 'STATUS_IN_PROGRESS' || statusType.name === 'STATUS_HALFTIME',
+        isLive: LIVE_DETAIL_STATUSES.has(statusType.name ?? ''),
         isFinished: statusType.completed ?? false,
+        clockRunning: RUNNING_STATUSES.has(statusType.name ?? ''),
+        period,
+        displayClock,
+        resultSuffix,
+        shootout,
         venue: venueName,
         city: cityName,
         date: header?.date ?? '',

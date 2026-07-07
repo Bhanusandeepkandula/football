@@ -10,10 +10,12 @@ const colors = {
     card: '#111114',
     cardElevated: '#1C1C1E',
     cardForeground: '#FFFFFF',
+    ink: '#0A0B0E',
 
     // Accent
     primary: '#F5A623',
     primaryForeground: '#000000',
+    kicker: '#F5A623',
 
     // Neutral
     secondary: '#1C1C1E',
@@ -32,6 +34,8 @@ const colors = {
     border: 'rgba(255,255,255,0.1)',
     input: '#1C1C1E',
     separator: 'rgba(255,255,255,0.06)',
+    hairline: 'rgba(255,255,255,0.09)',
+    scrim: 'rgba(0,0,0,0.55)',
 
     // Sport specific
     gold: '#F5A623',

@@ -17,6 +17,7 @@ import { ChevronLeft, ChevronRight, AlertTriangle, CalendarDays } from 'lucide-r
 import { useColors } from '@/hooks/useColors';
 import { useScoreboard, EspnEvent, isLive, isFinished, hasStarted } from '@/hooks/useWorldCup';
 import { MatchCard } from '@/components/MatchCard';
+import { font, KICKER_SPACING } from '@/constants/typography';
 
 const FILTERS = ['All', 'Live', 'Upcoming', 'Results'] as const;
 type Filter = (typeof FILTERS)[number];
@@ -67,14 +68,15 @@ export default function MatchesScreen() {
   return (
     <View style={[styles.root, { backgroundColor: colors.background }]}>
 
-      {/* ── Header ───────────────────────────────────────────── */}
+      {/* ── Masthead ─────────────────────────────────────────── */}
       <View style={[styles.header, { paddingTop: topPad + 16 }]}>
-        <View>
-          <Text style={[styles.headerTitle, { color: colors.foreground }]}>Matches</Text>
+        <Text style={[styles.kicker, { color: colors.primary }]}>FIFA WORLD CUP · 2026</Text>
+        <View style={styles.headerRow}>
+          <Text style={[styles.headerTitle, { color: colors.foreground }]}>MATCHES</Text>
           {liveCount > 0 && (
-            <View style={styles.liveRow}>
-              <View style={[styles.livePulse, { backgroundColor: colors.live }]} />
-              <Text style={[styles.liveLabel, { color: colors.live }]}>{liveCount} Live Now</Text>
+            <View style={[styles.liveTag, { backgroundColor: colors.live }]}>
+              <View style={styles.livePulse} />
+              <Text style={styles.liveTagText}>{liveCount} LIVE</Text>
             </View>
           )}
         </View>
@@ -182,19 +184,35 @@ export default function MatchesScreen() {
 const styles = StyleSheet.create({
   root: { flex: 1 },
 
-  // Header
+  // Masthead
   header: {
-    paddingHorizontal: 24,
+    paddingHorizontal: 20,
     paddingBottom: 8,
   },
-  headerTitle: {
-    fontSize: 34,
-    fontFamily: 'Nunito_900Black',
-    letterSpacing: -0.5,
+  kicker: {
+    fontSize: 12,
+    fontFamily: font.displayMed,
+    letterSpacing: KICKER_SPACING,
+    marginBottom: 2,
   },
-  liveRow: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 3 },
-  livePulse: { width: 7, height: 7, borderRadius: 3.5 },
-  liveLabel: { fontSize: 13, fontFamily: 'Nunito_700Bold' },
+  headerRow: { flexDirection: 'row', alignItems: 'center', gap: 12 },
+  headerTitle: {
+    fontSize: 40,
+    fontFamily: font.displayBold,
+    letterSpacing: 0.5,
+    lineHeight: 44,
+  },
+  liveTag: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 6,
+    marginTop: 6,
+  },
+  livePulse: { width: 6, height: 6, borderRadius: 3, backgroundColor: '#fff' },
+  liveTagText: { color: '#fff', fontSize: 11, fontFamily: font.displaySemi, letterSpacing: 0.8 },
 
   // Date nav
   dateNav: {
@@ -215,13 +233,14 @@ const styles = StyleSheet.create({
     paddingVertical: 4,
   },
   dateMain: {
-    fontSize: 17,
-    fontFamily: 'Nunito_800ExtraBold',
-    letterSpacing: -0.2,
+    fontSize: 18,
+    fontFamily: font.displaySemi,
+    letterSpacing: 0.6,
+    textTransform: 'uppercase',
   },
   dateSub: {
     fontSize: 12,
-    fontFamily: 'Nunito_400Regular',
+    fontFamily: font.regular,
     marginTop: 1,
   },
 
@@ -241,7 +260,7 @@ const styles = StyleSheet.create({
     marginRight: 8,
   },
   pillDot: { width: 6, height: 6, borderRadius: 3 },
-  pillText: { fontSize: 14, fontFamily: 'Nunito_700Bold' },
+  pillText: { fontSize: 13, fontFamily: font.displayMed, letterSpacing: 0.8, textTransform: 'uppercase' },
 
   // States
   state: {

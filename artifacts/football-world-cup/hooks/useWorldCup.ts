@@ -24,6 +24,7 @@ export interface EspnCompetitor {
   homeAway: 'home' | 'away';
   team: EspnTeam;
   score: string;
+  shootoutScore?: number;
   winner?: boolean;
   records?: { summary: string }[];
 }
@@ -283,6 +284,31 @@ export function getStatusLabel(event: EspnEvent): string {
   // scheduled — show local time
   const d = new Date(event.date);
   return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+}
+
+/** True when the match was decided (or is being decided) on penalties. */
+export function isPenaltyShootout(event: EspnEvent): boolean {
+  const comps = event.competitions?.[0]?.competitors ?? [];
+  const hasSo = comps.some((c) => c.shootoutScore != null);
+  return hasSo || event.status?.type?.name === 'STATUS_SHOOTOUT' || event.status?.type?.name === 'STATUS_FINAL_PEN';
+}
+
+/** "AET" / "Pens" suffix for a finished knockout result, else ''. */
+export function getResultSuffix(event: EspnEvent): string {
+  if (isPenaltyShootout(event)) return 'Pens';
+  const period = event.status?.period ?? 0;
+  // Regulation is 2 periods; anything beyond means the match went to extra time.
+  if (isFinished(event) && period > 2) return 'AET';
+  return '';
+}
+
+/** Shootout scoreline like "4-3" when the match went to penalties, else null. */
+export function getShootoutScore(event: EspnEvent): { home: number; away: number } | null {
+  const comps = event.competitions?.[0]?.competitors ?? [];
+  const home = comps.find((c) => c.homeAway === 'home');
+  const away = comps.find((c) => c.homeAway === 'away');
+  if (home?.shootoutScore == null || away?.shootoutScore == null) return null;
+  return { home: home.shootoutScore, away: away.shootoutScore };
 }
 
 export function getGroupLabel(event: EspnEvent): string {
