@@ -33,9 +33,16 @@ export interface MatchEvent {
   clock: string;
   period: number;
   type: MatchEventType;
+  typeLabel: string;
   text: string;
+  detail?: string;
   teamId?: string;
   playerName?: string;
+  secondaryName?: string; // assist provider (goal) or player coming off (sub)
+  scoreHome?: number;
+  scoreAway?: number;
+  isPenalty?: boolean;
+  isOwnGoal?: boolean;
 }
 
 export interface MatchStat {
@@ -96,6 +103,42 @@ function parseEventType(text: string, typeText?: string): MatchEventType {
   if (t.includes('substitut') || t.includes('sub ') || t.includes('replaced')) return 'substitution';
   if (t.includes('var')) return 'var';
   return 'other';
+}
+
+const DEFAULT_TYPE_LABEL: Record<MatchEventType, string> = {
+  goal: 'Goal',
+  'yellow-card': 'Yellow Card',
+  'red-card': 'Red Card',
+  substitution: 'Substitution',
+  var: 'VAR',
+  other: 'Event',
+};
+
+function cap(s: string): string {
+  return s ? s.charAt(0).toUpperCase() + s.slice(1) : s;
+}
+
+// ESPN's `text` is a full sentence, e.g.
+//   "Goal! Mexico 1, South Africa 0. Julián Quiñones (Mexico) right footed
+//    shot from the centre of the box to the centre of the goal. Assisted by Érik Lira."
+// Extract a concise human description of *what happened* for each event type.
+function cleanEventDetail(type: MatchEventType, text: string): string | undefined {
+  if (!text) return undefined;
+  if (type === 'goal') {
+    const t = text
+      .replace(/^Goal!.*?\.\s*/i, '') // drop "Goal! A 1, B 0. " score announcement
+      .replace(/\s*Assisted by[^.]*\.?/i, '') // assist captured separately
+      .replace(/^[^(]*\([^)]*\)\s*/, '') // drop "Player (Team) " prefix
+      .trim()
+      .replace(/\.$/, '');
+    return t ? cap(t) : undefined;
+  }
+  if (type === 'yellow-card' || type === 'red-card') {
+    const m = text.match(/for (.+?)\.?\s*$/i);
+    if (m) return cap(`for ${m[1]}`);
+    return undefined;
+  }
+  return undefined;
 }
 
 const STAT_KEYS = [
@@ -198,7 +241,11 @@ export function useMatchDetail(eventId: string) {
       }
 
       // ── Events ───────────────────────────────────────────────────────────
-      // ESPN exposes match events under `keyEvents`, NOT `plays`.
+      // ESPN exposes match events under `keyEvents`, NOT `plays`. keyEvents are
+      // already chronological, so we accumulate a running score across goals.
+      const homeIdForEvents = home?.team?.id;
+      let runningHome = 0;
+      let runningAway = 0;
       const events: MatchEvent[] = (data.keyEvents ?? [])
         .filter((p: any) => {
           const s = `${p.type?.text ?? ''} ${p.type?.type ?? ''}`.toLowerCase();
@@ -213,15 +260,44 @@ export function useMatchDetail(eventId: string) {
             s.includes('var')
           );
         })
-        .map((p: any, i: number) => ({
-          id: p.id ?? String(i),
-          clock: p.clock?.displayValue ?? '',
-          period: p.period?.number ?? 1,
-          type: parseEventType(p.type?.text ?? p.text ?? '', p.type?.type),
-          text: p.shortText ?? p.text ?? '',
-          teamId: p.team?.id,
-          playerName: p.participants?.[0]?.athlete?.displayName ?? '',
-        }));
+        .map((p: any, i: number) => {
+          const typeText: string = p.type?.text ?? '';
+          const fullText: string = p.text ?? p.shortText ?? '';
+          const type = parseEventType(typeText || p.text || '', p.type?.type);
+          const isOwnGoal = /own goal/i.test(fullText) || /own[-\s]?goal/i.test(typeText);
+          const isPenalty = /penalt/i.test(fullText) || /penalt/i.test(typeText);
+
+          let scoreHome: number | undefined;
+          let scoreAway: number | undefined;
+          if (type === 'goal' && p.team?.id) {
+            // Only accumulate when we can attribute the goal to a side; a
+            // goal with a missing team id would otherwise silently mis-score.
+            if (p.team.id === homeIdForEvents) runningHome += 1;
+            else runningAway += 1;
+            scoreHome = runningHome;
+            scoreAway = runningAway;
+          }
+
+          return {
+            id: p.id ?? String(i),
+            clock: p.clock?.displayValue ?? '',
+            period: p.period?.number ?? 1,
+            type,
+            typeLabel: isOwnGoal ? 'Own Goal' : isPenalty && type === 'goal' ? 'Penalty' : typeText || DEFAULT_TYPE_LABEL[type],
+            text: p.shortText ?? fullText,
+            detail: cleanEventDetail(type, fullText),
+            teamId: p.team?.id,
+            playerName: p.participants?.[0]?.athlete?.displayName ?? '',
+            secondaryName:
+              type === 'goal' || type === 'substitution'
+                ? p.participants?.[1]?.athlete?.displayName ?? undefined
+                : undefined,
+            scoreHome,
+            scoreAway,
+            isPenalty,
+            isOwnGoal,
+          };
+        });
 
       // ── Stats ────────────────────────────────────────────────────────────
       const boxTeams: any[] = data.boxscore?.teams ?? [];

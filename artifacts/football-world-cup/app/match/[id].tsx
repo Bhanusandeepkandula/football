@@ -30,6 +30,7 @@ import { useColors } from '@/hooks/useColors';
 import { useMatchDetail, MatchPlayer, MatchEvent } from '@/hooks/useMatchDetail';
 import { FormationPitch } from '@/components/FormationPitch';
 import { MatchTimeline } from '@/components/MatchTimeline';
+import { EventsTimeline } from '@/components/EventsTimeline';
 import { StatsBar } from '@/components/StatsBar';
 import { SegmentedControl } from '@/components/SegmentedControl';
 
@@ -157,11 +158,13 @@ export default function MatchDetailScreen() {
               <StatsBar stats={data.stats} homeColor={homeColor} awayColor={awayColor} />
             )}
             {activeTab === 'events' && (
-              <MatchTimeline
-                events={data.events}
-                homeTeamId={data.homeTeam.id}
-                awayTeamId={data.awayTeam.id}
-              />
+              <View style={{ paddingTop: 14 }}>
+                <EventsTimeline
+                  events={data.events}
+                  homeTeam={data.homeTeam}
+                  awayTeam={data.awayTeam}
+                />
+              </View>
             )}
           </Animated.View>
         </ScrollView>
