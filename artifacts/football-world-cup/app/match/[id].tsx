@@ -302,11 +302,36 @@ function PlayerListSection({ title, players, color, colors, isBench }: {
       </View>
       {players.map((p, i) => (
         <View key={p.id + i} style={[styles.playerRow, { borderBottomColor: colors.border }]}>
-          <Text style={[styles.jerseyCell, { color: isBench ? colors.mutedForeground : color }]}>{p.jersey}</Text>
-          <Text style={[styles.posCell, { color: colors.mutedForeground }]}>{p.position}</Text>
-          <Text style={[styles.nameCell, { color: colors.foreground }]} numberOfLines={1}>{p.displayName}</Text>
+          {/* Headshot or jersey-colored avatar */}
+          {p.headshot ? (
+            <Image
+              source={{ uri: p.headshot }}
+              style={[styles.playerAvatar, { borderColor: color }]}
+              resizeMode="cover"
+            />
+          ) : (
+            <View style={[styles.playerAvatarPlaceholder, { backgroundColor: isBench ? colors.muted : color + '33', borderColor: color }]}>
+              <Text style={[styles.playerAvatarText, { color: isBench ? colors.mutedForeground : color }]}>
+                {p.jersey || p.positionGroup[0]}
+              </Text>
+            </View>
+          )}
+          <View style={styles.playerInfo}>
+            <Text style={[styles.nameCell, { color: colors.foreground }]} numberOfLines={1}>{p.displayName}</Text>
+            <Text style={[styles.posCell, { color: colors.mutedForeground }]}>{p.position}</Text>
+          </View>
           {p.stats['goals'] && p.stats['goals'] !== '0' ? (
             <Text style={[styles.statBadge, { color: colors.primary }]}>⚽ {p.stats['goals']}</Text>
+          ) : null}
+          {p.stats['yellowCards'] && p.stats['yellowCards'] !== '0' ? (
+            <View style={styles.cardBadge}>
+              <View style={[styles.cardIndicator, { backgroundColor: '#F5A623' }]} />
+            </View>
+          ) : null}
+          {p.stats['redCards'] && p.stats['redCards'] !== '0' ? (
+            <View style={styles.cardBadge}>
+              <View style={[styles.cardIndicator, { backgroundColor: '#E74C3C' }]} />
+            </View>
           ) : null}
         </View>
       ))}
@@ -444,14 +469,32 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     paddingHorizontal: 16,
-    paddingVertical: 10,
+    paddingVertical: 9,
     borderBottomWidth: StyleSheet.hairlineWidth,
-    gap: 8,
+    gap: 10,
   },
+  playerAvatar: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    borderWidth: 1.5,
+  },
+  playerAvatarPlaceholder: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    borderWidth: 1.5,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  playerAvatarText: { fontSize: 12, fontFamily: 'Inter_700Bold' },
+  playerInfo: { flex: 1 },
   jerseyCell: { width: 26, fontSize: 14, fontFamily: 'Inter_700Bold', textAlign: 'center' },
-  posCell: { width: 36, fontSize: 11, fontFamily: 'Inter_500Medium' },
-  nameCell: { flex: 1, fontSize: 13, fontFamily: 'Inter_500Medium' },
+  posCell: { fontSize: 11, fontFamily: 'Inter_400Regular' },
+  nameCell: { fontSize: 13, fontFamily: 'Inter_500Medium' },
   statBadge: { fontSize: 12, fontFamily: 'Inter_600SemiBold' },
+  cardBadge: { marginLeft: 2 },
+  cardIndicator: { width: 10, height: 14, borderRadius: 2 },
 
   // Section header
   sectionHeader: { paddingHorizontal: 16, paddingVertical: 10, borderBottomWidth: StyleSheet.hairlineWidth },
