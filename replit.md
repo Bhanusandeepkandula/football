@@ -1,6 +1,6 @@
-# [Project name]
+# World Cup 2026
 
-_Replace the heading above with the project's name, and this line with one sentence describing what this app does for users._
+A Football World Cup 2026 mobile app that shows live scores, match results, group standings, and the knockout bracket — all fetched in real time from ESPN's public API.
 
 ## Run & Operate
 

@@ -1,0 +1,23 @@
+kind = "mobile"
+previewPath = "/"
+title = "Football World Cup"
+version = "1.0.0"
+id = "artifacts/football-world-cup"
+router = "expo-domain"
+
+[[services]]
+name = "expo"
+ensurePreviewReachable = "/status"
+paths = [ "/" ]
+localPort = 21589
+
+[services.development]
+run = "pnpm --filter @workspace/football-world-cup run dev"
+
+[services.production]
+build = [ "pnpm", "--filter", "@workspace/football-world-cup", "run", "build" ]
+run = [ "pnpm", "--filter", "@workspace/football-world-cup", "run", "serve" ]
+
+[services.env]
+PORT = "21589"
+BASE_PATH = "/"
