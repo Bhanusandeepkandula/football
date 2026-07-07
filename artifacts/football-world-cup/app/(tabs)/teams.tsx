@@ -40,7 +40,7 @@ export default function TeamsScreen() {
     <View style={[styles.container, { backgroundColor: colors.background }]}>
       {/* Header */}
       <View style={[styles.header, { paddingTop: topPad + 12 }]}>
-        <Text style={[styles.title, { color: colors.foreground }]}>🌍 Teams</Text>
+        <Text style={[styles.title, { color: colors.foreground }]}>Teams</Text>
         <Text style={[styles.subtitle, { color: colors.mutedForeground }]}>
           {allTeams.length} qualified nations
         </Text>

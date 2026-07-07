@@ -1,6 +1,7 @@
 import React from 'react';
 import { View, StyleSheet, Image, Text, Dimensions } from 'react-native';
 import { Svg, Line, Circle as SvgCircle } from 'react-native-svg';
+import { Trophy } from 'lucide-react-native';
 import { BracketRound, EspnCompetitor } from '@/hooks/useWorldCup';
 
 const SCREEN_W = Dimensions.get('window').width;
@@ -155,7 +156,7 @@ export function CircularBracket({ rounds }: { rounds: BracketRound[] }) {
 
       {/* Trophy at center */}
       <View style={[styles.trophy, { left: CX - 28, top: CY - 28, width: 56, height: 56 }]}>
-        <Text style={styles.trophyEmoji}>🏆</Text>
+        <Trophy size={26} color="#F5A623" fill="#F5A623" />
       </View>
     </View>
   );
@@ -196,8 +197,5 @@ const styles = StyleSheet.create({
     borderRadius: 28,
     borderWidth: 2,
     borderColor: 'rgba(245,166,35,0.5)',
-  },
-  trophyEmoji: {
-    fontSize: 28,
   },
 });

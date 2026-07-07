@@ -14,6 +14,10 @@ Endpoint: `https://site.api.espn.com/apis/site/v2/sports/soccer/fifa.world/summa
 - **Events → `data.keyEvents[]`**. Each has `type.text`/`type.type` (e.g. "Goal - Header"/"goal---header", "Penalty - Saved", "Kickoff", "Halftime"), `clock.displayValue`, `period.number`, `scoringPlay`, `team.{id,displayName}`, and for goals `participants[0].athlete.displayName` (scorer). Filter out kickoff/delay/halftime.
 - **Stats → `data.boxscore.teams[].statistics[]`** (this one IS populated). Names are ESPN-specific: `foulsCommitted`, `wonCorners`, `totalPasses`/`accuratePasses`/`passPct`, `totalTackles`, `possessionPct`, `totalShots`, `shotsOnTarget`, `offsides`, `saves`, `yellow/redCards`, `interceptions`. NOT `fouls`/`corners`/`tackles`.
 
-**Why:** cost a full debug cycle — the match-detail screen rendered its hero but empty tabs because the parser read `boxscore.players`/`plays`.
+**Team crest field differs by endpoint:** in `/summary`, the header competitor team exposes `team.logos[].href` — there is **NO** `team.logo` scalar (it's `undefined`). But the `scoreboard` and core-API team objects DO have a `team.logo` scalar. So the same app can correctly read `team.logo` for the match list/bracket/groups yet get blank flags (color-circle fallback) on the match-detail hero. Use `team.logos?.[0]?.href ?? team.logo`.
+
+**Match meta lives in `data.gameInfo`:** `gameInfo.attendance` (number), `gameInfo.officials[]` (find `position.name === 'Referee'` → `displayName`), and `gameInfo.venue.{fullName,address.city}` (the `header.competitions[0].venue` is often `undefined`, so fall back to `gameInfo.venue`). Round/stage name is `data.header.season.name` (e.g. "2026 FIFA World Cup, Group Stage" — strip the `"YYYY FIFA World Cup, "` prefix).
+
+**Why:** cost a full debug cycle — the match-detail screen rendered its hero but empty tabs because the parser read `boxscore.players`/`plays`; and later the hero showed plain color circles instead of flags because it read the non-existent `team.logo` scalar instead of `team.logos[]`.
 
 **How to apply:** any ESPN soccer detail parsing must use `rosters`/`keyEvents`/`boxscore.teams`. Resolve home/away from `rosters[].homeAway` first, then team-id match, then preserve roster order (index 0 = home) — never default-flip to index 1.

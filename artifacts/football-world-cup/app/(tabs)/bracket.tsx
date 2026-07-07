@@ -12,7 +12,7 @@ import {
 } from 'react-native';
 import Animated, { FadeIn } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { LayoutList, Circle } from 'lucide-react-native';
+import { LayoutList, Circle, Trophy } from 'lucide-react-native';
 import { useColors } from '@/hooks/useColors';
 import { useBracket, BracketRound } from '@/hooks/useWorldCup';
 import { MatchCard } from '@/components/MatchCard';
@@ -37,7 +37,7 @@ export default function BracketScreen() {
       {/* Header */}
       <View style={[styles.header, { paddingTop: topPad + 12 }]}>
         <View>
-          <Text style={[styles.title, { color: colors.foreground }]}>🏆 Bracket</Text>
+          <Text style={[styles.title, { color: colors.foreground }]}>Bracket</Text>
           <Text style={[styles.subtitle, { color: colors.mutedForeground }]}>
             FIFA World Cup 2026
           </Text>
@@ -76,7 +76,7 @@ export default function BracketScreen() {
         </View>
       ) : rounds.length === 0 ? (
         <View style={styles.centered}>
-          <Text style={{ fontSize: 52, color: colors.mutedForeground }}>🏟</Text>
+          <Trophy size={48} color={colors.mutedForeground} strokeWidth={1.6} />
           <Text style={[styles.emptyText, { color: colors.mutedForeground }]}>Knockout stage not started</Text>
           <Text style={[styles.emptySubtext, { color: colors.mutedForeground }]}>Check back after the group stage</Text>
         </View>

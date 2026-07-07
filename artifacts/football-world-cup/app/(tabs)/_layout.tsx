@@ -1,24 +1,9 @@
 import React from 'react';
-import { Platform, View, Text, StyleSheet } from 'react-native';
+import { Platform } from 'react-native';
 import { Tabs } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { CalendarDays, Trophy, LayoutGrid, Shield } from 'lucide-react-native';
 import { useColors } from '@/hooks/useColors';
-
-// Icons as text so we avoid any Lucide import crash on web
-const TAB_ICONS: Record<string, string> = {
-  index:   '⚽',
-  bracket: '🏆',
-  groups:  '📋',
-  teams:   '🚩',
-};
-
-function TabIcon({ route, focused }: { route: string; focused: boolean }) {
-  return (
-    <View style={[styles.iconWrap, focused && styles.iconWrapActive]}>
-      <View style={focused ? styles.activeIndicator : null} />
-    </View>
-  );
-}
 
 export default function TabLayout() {
   const colors = useColors();
@@ -60,7 +45,7 @@ export default function TabLayout() {
         options={{
           title: 'Matches',
           tabBarIcon: ({ color, focused }) => (
-            <Text style={{ fontSize: 20, opacity: focused ? 1 : 0.45 }}>⚽</Text>
+            <CalendarDays size={23} color={color} strokeWidth={focused ? 2.5 : 2} />
           ),
         }}
       />
@@ -69,7 +54,7 @@ export default function TabLayout() {
         options={{
           title: 'Bracket',
           tabBarIcon: ({ color, focused }) => (
-            <Text style={{ fontSize: 20, opacity: focused ? 1 : 0.45 }}>🏆</Text>
+            <Trophy size={23} color={color} strokeWidth={focused ? 2.5 : 2} />
           ),
         }}
       />
@@ -78,7 +63,7 @@ export default function TabLayout() {
         options={{
           title: 'Groups',
           tabBarIcon: ({ color, focused }) => (
-            <Text style={{ fontSize: 20, opacity: focused ? 1 : 0.45 }}>📊</Text>
+            <LayoutGrid size={23} color={color} strokeWidth={focused ? 2.5 : 2} />
           ),
         }}
       />
@@ -87,26 +72,10 @@ export default function TabLayout() {
         options={{
           title: 'Teams',
           tabBarIcon: ({ color, focused }) => (
-            <Text style={{ fontSize: 20, opacity: focused ? 1 : 0.45 }}>🌍</Text>
+            <Shield size={23} color={color} strokeWidth={focused ? 2.5 : 2} />
           ),
         }}
       />
     </Tabs>
   );
 }
-
-const styles = StyleSheet.create({
-  tabIcon: {
-    alignItems: 'center',
-    justifyContent: 'flex-end',
-    height: 24,
-    opacity: 0.5,
-  },
-  dot: {
-    height: 5,
-    borderRadius: 2.5,
-  },
-  iconWrap: {},
-  iconWrapActive: {},
-  activeIndicator: {},
-});

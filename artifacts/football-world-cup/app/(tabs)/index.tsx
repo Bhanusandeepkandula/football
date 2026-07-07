@@ -13,7 +13,7 @@ import {
   ViewStyle,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { ChevronLeft, ChevronRight } from 'lucide-react-native';
+import { ChevronLeft, ChevronRight, AlertTriangle, CalendarDays } from 'lucide-react-native';
 import { useColors } from '@/hooks/useColors';
 import { useScoreboard, EspnEvent, isLive, isFinished, hasStarted } from '@/hooks/useWorldCup';
 import { MatchCard } from '@/components/MatchCard';
@@ -144,7 +144,7 @@ export default function MatchesScreen() {
         </View>
       ) : isError ? (
         <View style={styles.state}>
-          <Text style={[styles.stateIcon, { color: colors.mutedForeground }]}>⚠️</Text>
+          <AlertTriangle size={48} color={colors.mutedForeground} strokeWidth={1.6} />
           <Text style={[styles.stateText, { color: colors.mutedForeground }]}>Could not load matches</Text>
           <TouchableOpacity onPress={() => refetch()} style={[styles.retryBtn, { backgroundColor: colors.primary }]}>
             <Text style={[styles.retryText, { color: colors.primaryForeground }]}>Try Again</Text>
@@ -152,7 +152,7 @@ export default function MatchesScreen() {
         </View>
       ) : filtered.length === 0 ? (
         <View style={styles.state}>
-          <Text style={styles.stateIcon}>🏟</Text>
+          <CalendarDays size={48} color={colors.mutedForeground} strokeWidth={1.6} />
           <Text style={[styles.stateTitle, { color: colors.foreground }]}>No matches</Text>
           <Text style={[styles.stateText, { color: colors.mutedForeground }]}>
             {filter === 'Live' ? 'No matches in progress' : `No ${filter.toLowerCase()} matches today`}
@@ -251,7 +251,6 @@ const styles = StyleSheet.create({
     gap: 10,
     paddingHorizontal: 32,
   },
-  stateIcon: { fontSize: 52 },
   stateTitle: { fontSize: 20, fontFamily: 'Nunito_700Bold' },
   stateText: { fontSize: 15, fontFamily: 'Nunito_400Regular', textAlign: 'center' },
   retryBtn: { paddingHorizontal: 28, paddingVertical: 12, borderRadius: 24, marginTop: 4 },

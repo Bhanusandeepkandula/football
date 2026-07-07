@@ -10,6 +10,7 @@ import {
   Platform,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { LayoutGrid } from 'lucide-react-native';
 import { useColors } from '@/hooks/useColors';
 import { useStandings, EspnGroup } from '@/hooks/useWorldCup';
 import { GroupTable } from '@/components/GroupTable';
@@ -26,7 +27,7 @@ export default function GroupsScreen() {
     <View style={[styles.container, { backgroundColor: colors.background }]}>
       {/* Header */}
       <View style={[styles.header, { paddingTop: topPad + 12 }]}>
-        <Text style={[styles.title, { color: colors.foreground }]}>📊 Group Stage</Text>
+        <Text style={[styles.title, { color: colors.foreground }]}>Group Stage</Text>
         <Text style={[styles.subtitle, { color: colors.mutedForeground }]}>
           48 teams · 12 groups · Top 2 advance
         </Text>
@@ -53,7 +54,7 @@ export default function GroupsScreen() {
         </View>
       ) : groups.length === 0 ? (
         <View style={styles.centered}>
-          <Text style={{ fontSize: 48, color: colors.mutedForeground }}>📋</Text>
+          <LayoutGrid size={44} color={colors.mutedForeground} strokeWidth={1.6} />
           <Text style={[styles.emptyText, { color: colors.mutedForeground }]}>
             Group standings not available yet
           </Text>

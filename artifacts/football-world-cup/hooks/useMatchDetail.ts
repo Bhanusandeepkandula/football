@@ -57,6 +57,9 @@ export interface MatchDetail {
   venue?: string;
   city?: string;
   date: string;
+  round?: string;
+  referee?: string;
+  attendance?: number;
   lineups: [MatchTeamLineup, MatchTeamLineup] | null;
   events: MatchEvent[];
   stats: MatchStat[];
@@ -122,6 +125,18 @@ export function useMatchDetail(eventId: string) {
       const home = competitors.find((c: any) => c.homeAway === 'home') ?? competitors[0];
       const away = competitors.find((c: any) => c.homeAway === 'away') ?? competitors[1];
       const statusType = header?.status?.type ?? {};
+
+      // ── Match meta (round, venue, referee, attendance) ────────────────────
+      const gameInfo = data.gameInfo ?? {};
+      const round = String(data.header?.season?.name ?? '')
+        .replace(/^\d{4}\s+FIFA World Cup,?\s*/i, '')
+        .trim() || undefined;
+      const venueName = header?.venue?.fullName ?? gameInfo.venue?.fullName;
+      const cityName = header?.venue?.address?.city ?? gameInfo.venue?.address?.city;
+      const referee = (gameInfo.officials ?? []).find(
+        (o: any) => o.position?.name === 'Referee',
+      )?.displayName;
+      const attendance = typeof gameInfo.attendance === 'number' ? gameInfo.attendance : undefined;
 
       // ── Lineups ──────────────────────────────────────────────────────────
       // ESPN exposes lineups under `rosters`, NOT `boxscore.players`.
@@ -234,14 +249,14 @@ export function useMatchDetail(eventId: string) {
         homeTeam: {
           id: home?.team?.id ?? '',
           displayName: home?.team?.displayName ?? 'Home',
-          logo: home?.team?.logo ?? '',
+          logo: home?.team?.logos?.[0]?.href ?? home?.team?.logo ?? '',
           score: home?.score ?? '0',
           color: home?.team?.color ?? '003DA5',
         },
         awayTeam: {
           id: away?.team?.id ?? '',
           displayName: away?.team?.displayName ?? 'Away',
-          logo: away?.team?.logo ?? '',
+          logo: away?.team?.logos?.[0]?.href ?? away?.team?.logo ?? '',
           score: away?.score ?? '0',
           color: away?.team?.color ?? 'C8102E',
         },
@@ -249,9 +264,12 @@ export function useMatchDetail(eventId: string) {
         statusDetail: statusType.shortDetail ?? '',
         isLive: statusType.name === 'STATUS_IN_PROGRESS' || statusType.name === 'STATUS_HALFTIME',
         isFinished: statusType.completed ?? false,
-        venue: header?.venue?.fullName,
-        city: header?.venue?.address?.city,
+        venue: venueName,
+        city: cityName,
         date: header?.date ?? '',
+        round,
+        referee,
+        attendance,
         lineups,
         events,
         stats,
