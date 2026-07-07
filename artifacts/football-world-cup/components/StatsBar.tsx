@@ -97,7 +97,7 @@ const styles = StyleSheet.create({
   statValue: {
     width: 40,
     fontSize: 14,
-    fontFamily: 'Inter_700Bold',
+    fontFamily: 'Nunito_700Bold',
   },
   homeValue: {
     textAlign: 'right',
@@ -111,7 +111,7 @@ const styles = StyleSheet.create({
   },
   statLabel: {
     fontSize: 11,
-    fontFamily: 'Inter_400Regular',
+    fontFamily: 'Nunito_400Regular',
     textAlign: 'center',
     textTransform: 'uppercase',
     letterSpacing: 0.5,
@@ -134,6 +134,6 @@ const styles = StyleSheet.create({
   },
   emptyText: {
     fontSize: 14,
-    fontFamily: 'Inter_400Regular',
+    fontFamily: 'Nunito_400Regular',
   },
 });

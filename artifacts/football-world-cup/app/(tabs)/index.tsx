@@ -8,15 +8,17 @@ import {
   ActivityIndicator,
   RefreshControl,
   Platform,
+  ScrollView,
+  StyleProp,
+  ViewStyle,
 } from 'react-native';
-import Animated, { FadeIn } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { ChevronLeft, ChevronRight, Wifi } from 'lucide-react-native';
+import { ChevronLeft, ChevronRight } from 'lucide-react-native';
 import { useColors } from '@/hooks/useColors';
-import { useScoreboard, EspnEvent, isLive, isFinished } from '@/hooks/useWorldCup';
+import { useScoreboard, EspnEvent, isLive, isFinished, hasStarted } from '@/hooks/useWorldCup';
 import { MatchCard } from '@/components/MatchCard';
 
-const FILTERS = ['All', 'Live', 'Results', 'Upcoming'] as const;
+const FILTERS = ['All', 'Live', 'Upcoming', 'Results'] as const;
 type Filter = (typeof FILTERS)[number];
 
 function dateStr(d: Date) {
@@ -32,15 +34,15 @@ function friendlyDate(d: Date): string {
   if (d.toDateString() === today.toDateString()) return 'Today';
   if (d.toDateString() === yesterday.toDateString()) return 'Yesterday';
   if (d.toDateString() === tomorrow.toDateString()) return 'Tomorrow';
-  return d.toLocaleDateString(undefined, { day: 'numeric', month: 'short' });
+  return d.toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' });
 }
 
 function filterEvents(events: EspnEvent[], filter: Filter): EspnEvent[] {
   switch (filter) {
-    case 'Live': return events.filter(isLive);
-    case 'Results': return events.filter(isFinished);
-    case 'Upcoming': return events.filter(e => !isLive(e) && !isFinished(e));
-    default: return events;
+    case 'Live':     return events.filter(isLive);
+    case 'Results':  return events.filter(isFinished);
+    case 'Upcoming': return events.filter(e => !hasStarted(e));
+    default:         return events;
   }
 }
 
@@ -51,7 +53,6 @@ export default function MatchesScreen() {
   const [selectedDate, setSelectedDate] = useState(new Date());
 
   const { data, isLoading, isError, refetch, isRefetching } = useScoreboard(dateStr(selectedDate));
-
   const events = data?.events ?? [];
   const liveCount = events.filter(isLive).length;
   const filtered = filterEvents(events, filter);
@@ -64,88 +65,97 @@ export default function MatchesScreen() {
   };
 
   return (
-    <View style={[styles.container, { backgroundColor: colors.background }]}>
-      {/* Header */}
-      <View style={[styles.header, { paddingTop: topPad + 12 }]}>
+    <View style={[styles.root, { backgroundColor: colors.background }]}>
+
+      {/* ── Header ───────────────────────────────────────────── */}
+      <View style={[styles.header, { paddingTop: topPad + 16 }]}>
         <View>
-          <Text style={[styles.title, { color: colors.foreground }]}>⚽ World Cup 2026</Text>
+          <Text style={[styles.headerTitle, { color: colors.foreground }]}>Matches</Text>
           {liveCount > 0 && (
-            <Animated.View entering={FadeIn} style={styles.liveRow}>
+            <View style={styles.liveRow}>
               <View style={[styles.livePulse, { backgroundColor: colors.live }]} />
-              <Text style={[styles.liveCount, { color: colors.live }]}>
-                {liveCount} LIVE
-              </Text>
-            </Animated.View>
+              <Text style={[styles.liveLabel, { color: colors.live }]}>{liveCount} Live Now</Text>
+            </View>
           )}
         </View>
-        <View style={[styles.liveIndicator, { backgroundColor: colors.secondary, borderColor: colors.border }]}>
-          <Wifi size={12} color={colors.primary} />
-          <Text style={[styles.liveIndicatorText, { color: colors.primary }]}>ESPN</Text>
-        </View>
       </View>
 
-      {/* Date navigator */}
-      <View style={[styles.dateNav, { backgroundColor: colors.secondary, borderColor: colors.border }]}>
-        <TouchableOpacity onPress={() => shiftDate(-1)} style={styles.dateArrow} hitSlop={8}>
-          <ChevronLeft size={20} color={colors.foreground} />
+      {/* ── Date nav ─────────────────────────────────────────── */}
+      <View style={styles.dateNav}>
+        <TouchableOpacity onPress={() => shiftDate(-1)} hitSlop={16} style={styles.dateArrow}>
+          <ChevronLeft size={22} color={colors.mutedForeground} />
         </TouchableOpacity>
-        <TouchableOpacity onPress={() => setSelectedDate(new Date())} style={styles.dateLabelBtn}>
-          <Text style={[styles.dateLabel, { color: colors.foreground }]}>
-            {friendlyDate(selectedDate)}
-          </Text>
+        <TouchableOpacity onPress={() => setSelectedDate(new Date())} style={styles.dateCenter}>
+          <Text style={[styles.dateMain, { color: colors.foreground }]}>{friendlyDate(selectedDate)}</Text>
           <Text style={[styles.dateSub, { color: colors.mutedForeground }]}>
-            {selectedDate.toLocaleDateString(undefined, { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' })}
+            {selectedDate.toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric' })}
           </Text>
         </TouchableOpacity>
-        <TouchableOpacity onPress={() => shiftDate(1)} style={styles.dateArrow} hitSlop={8}>
-          <ChevronRight size={20} color={colors.foreground} />
+        <TouchableOpacity onPress={() => shiftDate(1)} hitSlop={16} style={styles.dateArrow}>
+          <ChevronRight size={22} color={colors.mutedForeground} />
         </TouchableOpacity>
       </View>
 
-      {/* Filter pills */}
-      <View style={styles.filterRow}>
-        {FILTERS.map(f => (
-          <TouchableOpacity
-            key={f}
-            onPress={() => setFilter(f)}
-            style={[
-              styles.pill,
-              {
-                backgroundColor: filter === f ? colors.primary : colors.secondary,
-                borderColor: filter === f ? colors.primary : colors.border,
-              },
-            ]}
-          >
-            {f === 'Live' && liveCount > 0 && (
-              <View style={[styles.pillDot, { backgroundColor: filter === f ? '#fff' : colors.live }]} />
-            )}
-            <Text style={[styles.pillText, { color: filter === f ? colors.primaryForeground : colors.mutedForeground }]}>
-              {f}
-              {f === 'Live' && liveCount > 0 ? ` · ${liveCount}` : ''}
-            </Text>
-          </TouchableOpacity>
-        ))}
-      </View>
+      {/* ── Filter pills ─────────────────────────────────────── */}
+      <ScrollView
+        horizontal
+        showsHorizontalScrollIndicator={false}
+        contentContainerStyle={styles.filters}
+      >
+        {FILTERS.map(f => {
+          const active = filter === f;
+          const isLiveFilter = f === 'Live';
+          return (
+            <TouchableOpacity
+              key={f}
+              onPress={() => setFilter(f)}
+              style={[
+                styles.pill,
+                {
+                  backgroundColor: active ? colors.primary : colors.card,
+                  ...(Platform.OS === 'web'
+                    ? { boxShadow: active ? `0 4px 10px ${colors.primary}55` : '0 2px 6px rgba(0,0,0,0.20)' } as any
+                    : {
+                        shadowColor: active ? colors.primary : '#000',
+                        shadowOpacity: active ? 0.35 : 0.2,
+                        shadowRadius: active ? 10 : 6,
+                        shadowOffset: { width: 0, height: active ? 4 : 2 },
+                        elevation: active ? 6 : 2,
+                      }),
+                },
+              ]}
+            >
+              {isLiveFilter && liveCount > 0 && (
+                <View style={[styles.pillDot, { backgroundColor: active ? '#000' : colors.live }]} />
+              )}
+              <Text style={[styles.pillText, { color: active ? colors.primaryForeground : colors.mutedForeground }]}>
+                {f}{isLiveFilter && liveCount > 0 ? ` · ${liveCount}` : ''}
+              </Text>
+            </TouchableOpacity>
+          );
+        })}
+      </ScrollView>
 
-      {/* List */}
+      {/* ── Content ──────────────────────────────────────────── */}
       {isLoading ? (
-        <View style={styles.centered}>
+        <View style={styles.state}>
           <ActivityIndicator color={colors.primary} size="large" />
-          <Text style={[styles.loadingText, { color: colors.mutedForeground }]}>Fetching live scores…</Text>
+          <Text style={[styles.stateText, { color: colors.mutedForeground }]}>Loading matches…</Text>
         </View>
       ) : isError ? (
-        <View style={styles.centered}>
-          <Text style={[styles.errorText, { color: colors.mutedForeground }]}>Could not load matches</Text>
+        <View style={styles.state}>
+          <Text style={[styles.stateIcon, { color: colors.mutedForeground }]}>⚠️</Text>
+          <Text style={[styles.stateText, { color: colors.mutedForeground }]}>Could not load matches</Text>
           <TouchableOpacity onPress={() => refetch()} style={[styles.retryBtn, { backgroundColor: colors.primary }]}>
-            <Text style={[styles.retryText, { color: colors.primaryForeground }]}>Retry</Text>
+            <Text style={[styles.retryText, { color: colors.primaryForeground }]}>Try Again</Text>
           </TouchableOpacity>
         </View>
       ) : filtered.length === 0 ? (
-        <View style={styles.centered}>
-          <Text style={[styles.emptyIcon, { color: colors.mutedForeground }]}>🏟</Text>
-          <Text style={[styles.emptyTitle, { color: colors.foreground }]}>No matches</Text>
-          <Text style={[styles.emptyText, { color: colors.mutedForeground }]}>
-            {filter === 'Live' ? 'No live matches right now' : `No ${filter.toLowerCase()} matches on this date`}
+        <View style={styles.state}>
+          <Text style={styles.stateIcon}>🏟</Text>
+          <Text style={[styles.stateTitle, { color: colors.foreground }]}>No matches</Text>
+          <Text style={[styles.stateText, { color: colors.mutedForeground }]}>
+            {filter === 'Live' ? 'No matches in progress' : `No ${filter.toLowerCase()} matches today`}
           </Text>
         </View>
       ) : (
@@ -153,7 +163,7 @@ export default function MatchesScreen() {
           data={filtered}
           keyExtractor={item => item.id}
           renderItem={({ item, index }) => <MatchCard event={item} index={index} />}
-          contentContainerStyle={{ paddingTop: 4, paddingBottom: insets.bottom + 90 }}
+          contentContainerStyle={{ paddingTop: 6, paddingBottom: insets.bottom + 100 }}
           refreshControl={
             <RefreshControl
               refreshing={isRefetching}
@@ -170,77 +180,80 @@ export default function MatchesScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1 },
+  root: { flex: 1 },
+
+  // Header
   header: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    justifyContent: 'space-between',
-    paddingHorizontal: 20,
-    paddingBottom: 10,
+    paddingHorizontal: 24,
+    paddingBottom: 8,
   },
-  title: { fontSize: 26, fontFamily: 'Inter_700Bold', letterSpacing: -0.5 },
-  liveRow: { flexDirection: 'row', alignItems: 'center', marginTop: 4, gap: 5 },
-  livePulse: { width: 8, height: 8, borderRadius: 4 },
-  liveCount: { fontSize: 12, fontFamily: 'Inter_700Bold', letterSpacing: 1 },
-  liveIndicator: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-    paddingHorizontal: 10,
-    paddingVertical: 5,
-    borderRadius: 20,
-    borderWidth: 1,
-    marginTop: 6,
+  headerTitle: {
+    fontSize: 34,
+    fontFamily: 'Nunito_900Black',
+    letterSpacing: -0.5,
   },
-  liveIndicatorText: { fontSize: 11, fontFamily: 'Inter_600SemiBold' },
+  liveRow: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 3 },
+  livePulse: { width: 7, height: 7, borderRadius: 3.5 },
+  liveLabel: { fontSize: 13, fontFamily: 'Nunito_700Bold' },
 
   // Date nav
   dateNav: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginHorizontal: 16,
-    marginBottom: 10,
-    borderRadius: 14,
-    borderWidth: 1,
-    overflow: 'hidden',
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    marginBottom: 4,
   },
   dateArrow: {
-    paddingHorizontal: 12,
-    paddingVertical: 12,
+    padding: 8,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  dateLabelBtn: { flex: 1, alignItems: 'center', paddingVertical: 10 },
-  dateLabel: { fontSize: 15, fontFamily: 'Inter_700Bold' },
-  dateSub: { fontSize: 11, fontFamily: 'Inter_400Regular', marginTop: 1 },
+  dateCenter: {
+    flex: 1,
+    alignItems: 'center',
+    paddingVertical: 4,
+  },
+  dateMain: {
+    fontSize: 17,
+    fontFamily: 'Nunito_800ExtraBold',
+    letterSpacing: -0.2,
+  },
+  dateSub: {
+    fontSize: 12,
+    fontFamily: 'Nunito_400Regular',
+    marginTop: 1,
+  },
 
   // Filters
-  filterRow: {
-    flexDirection: 'row',
+  filters: {
     paddingHorizontal: 16,
-    paddingBottom: 10,
+    paddingBottom: 12,
     gap: 8,
-    flexWrap: 'wrap',
   },
   pill: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: 14,
-    paddingVertical: 7,
+    paddingHorizontal: 16,
+    paddingVertical: 8,
     borderRadius: 20,
-    borderWidth: 1,
-    gap: 5,
+    gap: 6,
+    marginRight: 8,
   },
   pillDot: { width: 6, height: 6, borderRadius: 3 },
-  pillText: { fontSize: 13, fontFamily: 'Inter_600SemiBold' },
+  pillText: { fontSize: 14, fontFamily: 'Nunito_700Bold' },
 
   // States
-  centered: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 10 },
-  loadingText: { fontSize: 14, fontFamily: 'Inter_400Regular', marginTop: 8 },
-  errorText: { fontSize: 15, fontFamily: 'Inter_400Regular' },
-  retryBtn: { paddingHorizontal: 24, paddingVertical: 10, borderRadius: 20 },
-  retryText: { fontSize: 14, fontFamily: 'Inter_600SemiBold' },
-  emptyIcon: { fontSize: 48 },
-  emptyTitle: { fontSize: 17, fontFamily: 'Inter_600SemiBold' },
-  emptyText: { fontSize: 14, fontFamily: 'Inter_400Regular', textAlign: 'center', paddingHorizontal: 32 },
+  state: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 10,
+    paddingHorizontal: 32,
+  },
+  stateIcon: { fontSize: 52 },
+  stateTitle: { fontSize: 20, fontFamily: 'Nunito_700Bold' },
+  stateText: { fontSize: 15, fontFamily: 'Nunito_400Regular', textAlign: 'center' },
+  retryBtn: { paddingHorizontal: 28, paddingVertical: 12, borderRadius: 24, marginTop: 4 },
+  retryText: { fontSize: 15, fontFamily: 'Nunito_700Bold' },
 });

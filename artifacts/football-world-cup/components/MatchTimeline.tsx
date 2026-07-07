@@ -128,7 +128,7 @@ const styles = StyleSheet.create({
   },
   playerText: {
     fontSize: 12,
-    fontFamily: 'Inter_500Medium',
+    fontFamily: 'Nunito_500Medium',
     flexShrink: 1,
   },
   clockBubble: {
@@ -141,7 +141,7 @@ const styles = StyleSheet.create({
   },
   clockText: {
     fontSize: 11,
-    fontFamily: 'Inter_700Bold',
+    fontFamily: 'Nunito_700Bold',
   },
   empty: {
     paddingVertical: 32,
@@ -149,6 +149,6 @@ const styles = StyleSheet.create({
   },
   emptyText: {
     fontSize: 14,
-    fontFamily: 'Inter_400Regular',
+    fontFamily: 'Nunito_400Regular',
   },
 });

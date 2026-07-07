@@ -201,22 +201,50 @@ export function useBracket() {
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
+const LIVE_STATUSES = new Set([
+  'STATUS_IN_PROGRESS',
+  'STATUS_HALFTIME',
+  'STATUS_END_PERIOD',
+  'STATUS_OVERTIME',
+  'STATUS_SHOOTOUT',
+  'STATUS_FIRST_HALF',
+  'STATUS_SECOND_HALF',
+  'STATUS_EXTRA_TIME',
+  'STATUS_EXTRA_TIME_HALFTIME',
+]);
+
 export function isLive(event: EspnEvent): boolean {
-  const typeName = event.status?.type?.name ?? '';
-  return typeName === 'STATUS_IN_PROGRESS' || typeName === 'STATUS_HALFTIME';
+  const name = event.status?.type?.name ?? '';
+  return LIVE_STATUSES.has(name);
 }
 
 export function isFinished(event: EspnEvent): boolean {
   return event.status?.type?.completed === true;
 }
 
+/** True once the match start time has passed, even if API status hasn't updated yet */
+export function hasStarted(event: EspnEvent): boolean {
+  if (isLive(event) || isFinished(event)) return true;
+  return Date.now() >= new Date(event.date).getTime();
+}
+
 export function getStatusLabel(event: EspnEvent): string {
   const t = event.status?.type;
   if (!t) return '';
-  if (t.name === 'STATUS_HALFTIME') return 'HT';
-  if (t.name === 'STATUS_IN_PROGRESS') return event.status.displayClock ?? t.shortDetail;
+  if (t.name === 'STATUS_HALFTIME') return 'Half Time';
+  if (t.name === 'STATUS_EXTRA_TIME_HALFTIME') return 'ET HT';
+  if (t.name === 'STATUS_SHOOTOUT') return 'Penalties';
+  if (LIVE_STATUSES.has(t.name)) {
+    const clock = event.status.displayClock;
+    return clock ? `${clock}'` : t.shortDetail ?? 'LIVE';
+  }
   if (t.completed) return 'FT';
-  // scheduled — show time
+  // scheduled — show local time
   const d = new Date(event.date);
   return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+}
+
+export function getGroupLabel(event: EspnEvent): string {
+  const note = event.competitions?.[0]?.notes?.find(n => n.type === 'event');
+  return note?.headline ?? '';
 }

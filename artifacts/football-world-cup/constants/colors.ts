@@ -1,39 +1,45 @@
 const colors = {
   light: {
+    // Base
     text: '#FFFFFF',
     tint: '#F5A623',
-
-    background: '#0A0E1A',
+    background: '#000000',
     foreground: '#FFFFFF',
 
-    card: '#141828',
+    // Surfaces
+    card: '#111114',
+    cardElevated: '#1C1C1E',
     cardForeground: '#FFFFFF',
 
+    // Accent
     primary: '#F5A623',
-    primaryForeground: '#0A0E1A',
+    primaryForeground: '#000000',
 
-    secondary: '#1E2D45',
-    secondaryForeground: '#FFFFFF',
+    // Neutral
+    secondary: '#1C1C1E',
+    secondaryForeground: '#EBEBF5',
+    muted: '#2C2C2E',
+    mutedForeground: '#8E8E93',
 
-    muted: '#1E2D45',
-    mutedForeground: '#8899AA',
-
-    accent: '#2ECC71',
-    accentForeground: '#FFFFFF',
-
-    destructive: '#E74C3C',
+    // States
+    accent: '#30D158',
+    accentForeground: '#000000',
+    destructive: '#FF3B30',
     destructiveForeground: '#FFFFFF',
+    live: '#FF3B30',
 
-    border: '#1E2D45',
-    input: '#1E2D45',
+    // Lines
+    border: 'rgba(255,255,255,0.1)',
+    input: '#1C1C1E',
+    separator: 'rgba(255,255,255,0.06)',
 
-    live: '#E74C3C',
+    // Sport specific
     gold: '#F5A623',
-    silver: '#BDC3C7',
-    pitchGreen: '#1A7A4A',
+    silver: '#8E8E93',
+    pitchGreen: '#166A3F',
   },
 
-  radius: 12,
+  radius: 16,
 };
 
 export default colors;

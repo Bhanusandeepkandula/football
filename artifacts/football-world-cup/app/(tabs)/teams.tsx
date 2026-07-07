@@ -152,12 +152,12 @@ const styles = StyleSheet.create({
   },
   title: {
     fontSize: 26,
-    fontFamily: 'Inter_700Bold',
+    fontFamily: 'Nunito_700Bold',
     letterSpacing: -0.5,
   },
   subtitle: {
     fontSize: 13,
-    fontFamily: 'Inter_400Regular',
+    fontFamily: 'Nunito_400Regular',
     marginTop: 2,
   },
   searchBox: {
@@ -174,7 +174,7 @@ const styles = StyleSheet.create({
   searchInput: {
     flex: 1,
     fontSize: 14,
-    fontFamily: 'Inter_400Regular',
+    fontFamily: 'Nunito_400Regular',
   },
   row: {
     gap: 8,
@@ -204,13 +204,13 @@ const styles = StyleSheet.create({
   },
   teamName: {
     fontSize: 13,
-    fontFamily: 'Inter_600SemiBold',
+    fontFamily: 'Nunito_600SemiBold',
     textAlign: 'center',
     lineHeight: 17,
   },
   teamAbbr: {
     fontSize: 11,
-    fontFamily: 'Inter_400Regular',
+    fontFamily: 'Nunito_400Regular',
     marginTop: 2,
   },
   centered: {
@@ -223,12 +223,12 @@ const styles = StyleSheet.create({
   },
   loadingText: {
     fontSize: 14,
-    fontFamily: 'Inter_400Regular',
+    fontFamily: 'Nunito_400Regular',
     marginTop: 8,
   },
   emptyText: {
     fontSize: 16,
-    fontFamily: 'Inter_500Medium',
+    fontFamily: 'Nunito_500Medium',
     textAlign: 'center',
   },
   retryBtn: {
@@ -238,6 +238,6 @@ const styles = StyleSheet.create({
   },
   retryText: {
     fontSize: 14,
-    fontFamily: 'Inter_600SemiBold',
+    fontFamily: 'Nunito_600SemiBold',
   },
 });

@@ -118,7 +118,7 @@ const styles = StyleSheet.create({
   },
   groupTitle: {
     fontSize: 14,
-    fontFamily: 'Inter_700Bold',
+    fontFamily: 'Nunito_700Bold',
     letterSpacing: 0.5,
   },
   row: {
@@ -133,7 +133,7 @@ const styles = StyleSheet.create({
   },
   headerText: {
     fontSize: 11,
-    fontFamily: 'Inter_600SemiBold',
+    fontFamily: 'Nunito_600SemiBold',
     textTransform: 'uppercase',
   },
   teamCol: {
@@ -146,7 +146,7 @@ const styles = StyleSheet.create({
   },
   rankText: {
     fontSize: 12,
-    fontFamily: 'Inter_600SemiBold',
+    fontFamily: 'Nunito_600SemiBold',
     width: 14,
     textAlign: 'center',
   },
@@ -157,17 +157,17 @@ const styles = StyleSheet.create({
   },
   teamName: {
     fontSize: 12,
-    fontFamily: 'Inter_500Medium',
+    fontFamily: 'Nunito_500Medium',
     flex: 1,
   },
   statCol: {
     width: 28,
     textAlign: 'center',
     fontSize: 12,
-    fontFamily: 'Inter_400Regular',
+    fontFamily: 'Nunito_400Regular',
   },
   ptsCol: {
-    fontFamily: 'Inter_700Bold',
+    fontFamily: 'Nunito_700Bold',
     fontSize: 13,
   },
 });

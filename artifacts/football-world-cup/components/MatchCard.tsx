@@ -1,16 +1,8 @@
 import React from 'react';
-import {
-  View,
-  Text,
-  StyleSheet,
-  TouchableOpacity,
-  Image,
-} from 'react-native';
-import Animated, { FadeInDown } from 'react-native-reanimated';
+import { View, Text, StyleSheet, TouchableOpacity, Image, Platform } from 'react-native';
 import { router } from 'expo-router';
-import { MapPin } from 'lucide-react-native';
 import { useColors } from '@/hooks/useColors';
-import { EspnEvent, getStatusLabel, isLive, isFinished } from '@/hooks/useWorldCup';
+import { EspnEvent, getStatusLabel, getGroupLabel, isLive, isFinished, hasStarted } from '@/hooks/useWorldCup';
 
 interface MatchCardProps {
   event: EspnEvent;
@@ -24,219 +16,202 @@ export function MatchCard({ event, index = 0 }: MatchCardProps) {
   const away = comp?.competitors?.find(c => c.homeAway === 'away');
   const live = isLive(event);
   const finished = isFinished(event);
+  const started = hasStarted(event);
   const statusLabel = getStatusLabel(event);
+  const groupLabel = getGroupLabel(event);
   const venue = comp?.venue?.fullName ?? '';
 
-  const handlePress = () => {
-    router.push(`/match/${event.id}` as any);
-  };
+  const homeScore = Number(home?.score ?? 0);
+  const awayScore = Number(away?.score ?? 0);
+  const homeWinner = finished && homeScore > awayScore;
+  const awayWinner = finished && awayScore > homeScore;
 
   return (
-    <Animated.View entering={FadeInDown.delay(index * 60).duration(350).springify()}>
-      <TouchableOpacity
-        onPress={handlePress}
-        activeOpacity={0.75}
-        style={[
+    <TouchableOpacity
+      onPress={() => router.push(`/match/${event.id}` as any)}
+      activeOpacity={0.7}
+      style={[
           styles.card,
-          {
-            backgroundColor: colors.card,
-            borderColor: live ? colors.live + '55' : colors.border,
-            borderRadius: 14,
-          },
+          { backgroundColor: colors.card },
+          Platform.OS === 'web'
+            ? ({ boxShadow: '0px 6px 20px rgba(0,0,0,0.28)' } as any)
+            : undefined,
         ]}
-      >
-        {/* Live glow strip */}
-        {live && <View style={[styles.liveStrip, { backgroundColor: colors.live }]} />}
+    >
+      {/* Live accent bar */}
+      {live && <View style={[styles.liveBar, { backgroundColor: colors.live }]} />}
 
-        {/* Status row */}
-        <View style={styles.statusRow}>
-          {live ? (
-            <View style={[styles.liveBadge, { backgroundColor: colors.live + '22', borderColor: colors.live + '66' }]}>
-              <View style={[styles.liveDot, { backgroundColor: colors.live }]} />
-              <Text style={[styles.liveText, { color: colors.live }]}>{statusLabel}</Text>
-            </View>
-          ) : (
-            <Text style={[styles.statusText, { color: finished ? colors.mutedForeground : colors.primary }]}>
-              {statusLabel}
-            </Text>
-          )}
-          {venue ? (
-            <View style={styles.venueRow}>
-              <MapPin size={10} color={colors.mutedForeground} />
-              <Text style={[styles.venueText, { color: colors.mutedForeground }]} numberOfLines={1}>
-                {venue}
+      {/* ── Row 1: group · status ───────────────────────────────── */}
+      <View style={styles.row1}>
+        <Text style={[styles.groupText, { color: colors.mutedForeground }]} numberOfLines={1}>
+          {groupLabel || 'FIFA World Cup 2026'}
+        </Text>
+        {live ? (
+          <View style={[styles.livePill, { backgroundColor: colors.live }]}>
+            <View style={styles.liveDot} />
+            <Text style={styles.livePillText}>{statusLabel}</Text>
+          </View>
+        ) : finished ? (
+          <Text style={[styles.ftText, { color: colors.mutedForeground }]}>FT</Text>
+        ) : (
+          <Text style={[styles.timeText, { color: colors.primary }]}>{statusLabel}</Text>
+        )}
+      </View>
+
+      {/* ── Row 2: team · score · team ──────────────────────────── */}
+      <View style={styles.row2}>
+        {/* Home */}
+        <View style={styles.teamSide}>
+          <TeamLogo uri={home?.team?.logo} />
+          <Text style={[styles.teamName, { color: homeWinner ? '#fff' : colors.mutedForeground, fontFamily: homeWinner ? 'Nunito_700Bold' : 'Nunito_500Medium' }]} numberOfLines={2}>
+            {home?.team?.displayName ?? ''}
+          </Text>
+        </View>
+
+        {/* Score */}
+        <View style={styles.scoreCenter}>
+          {started ? (
+            <View style={styles.scoreRow}>
+              <Text style={[styles.scoreNum, { color: homeWinner ? '#fff' : colors.mutedForeground }]}>
+                {home?.score ?? '0'}
+              </Text>
+              <Text style={[styles.scoreSep, { color: colors.muted }]}>–</Text>
+              <Text style={[styles.scoreNum, { color: awayWinner ? '#fff' : colors.mutedForeground }]}>
+                {away?.score ?? '0'}
               </Text>
             </View>
-          ) : null}
+          ) : (
+            <View style={styles.vsBox}>
+              <Text style={[styles.vsText, { color: colors.mutedForeground }]}>VS</Text>
+            </View>
+          )}
         </View>
 
-        {/* Teams row */}
-        <View style={styles.teamsRow}>
-          {/* Home */}
-          <View style={styles.teamSide}>
-            <TeamLogo uri={home?.team?.logo} size={44} />
-            <Text style={[styles.teamName, { color: colors.foreground }]} numberOfLines={2}>
-              {home?.team?.displayName ?? ''}
-            </Text>
-            {home?.winner && <Text style={[styles.winnerMark, { color: colors.primary }]}>★</Text>}
-          </View>
-
-          {/* Score / VS */}
-          <View style={styles.scoreBox}>
-            {finished || live ? (
-              <>
-                <Text style={[styles.score, { color: colors.foreground }]}>
-                  {home?.score ?? '0'} – {away?.score ?? '0'}
-                </Text>
-                {finished && (
-                  <Text style={[styles.ftLabel, { color: colors.mutedForeground }]}>Full Time</Text>
-                )}
-              </>
-            ) : (
-              <Text style={[styles.vs, { color: colors.mutedForeground }]}>VS</Text>
-            )}
-          </View>
-
-          {/* Away */}
-          <View style={[styles.teamSide, styles.teamSideRight]}>
-            {away?.winner && <Text style={[styles.winnerMark, { color: colors.primary }]}>★</Text>}
-            <Text
-              style={[styles.teamName, styles.teamNameRight, { color: colors.foreground }]}
-              numberOfLines={2}
-            >
-              {away?.team?.displayName ?? ''}
-            </Text>
-            <TeamLogo uri={away?.team?.logo} size={44} />
-          </View>
+        {/* Away */}
+        <View style={[styles.teamSide, styles.teamSideRight]}>
+          <TeamLogo uri={away?.team?.logo} />
+          <Text style={[styles.teamName, styles.teamNameRight, { color: awayWinner ? '#fff' : colors.mutedForeground, fontFamily: awayWinner ? 'Nunito_700Bold' : 'Nunito_500Medium' }]} numberOfLines={2}>
+            {away?.team?.displayName ?? ''}
+          </Text>
         </View>
+      </View>
 
-        {/* Tap hint */}
-        <Text style={[styles.tapHint, { color: colors.mutedForeground }]}>Tap for details →</Text>
-      </TouchableOpacity>
-    </Animated.View>
+      {/* ── Row 3: venue ────────────────────────────────────────── */}
+      {venue ? (
+        <Text style={[styles.venueText, { color: colors.mutedForeground }]} numberOfLines={1}>
+          {venue}
+        </Text>
+      ) : null}
+    </TouchableOpacity>
   );
 }
 
-function TeamLogo({ uri, size }: { uri?: string; size: number }) {
+function TeamLogo({ uri }: { uri?: string }) {
   const colors = useColors();
-  if (!uri) {
-    return <View style={[{ width: size, height: size, borderRadius: size / 2, backgroundColor: colors.muted }]} />;
-  }
-  return (
-    <Image
-      source={{ uri }}
-      style={{ width: size, height: size, borderRadius: size / 2 }}
-      resizeMode="contain"
-    />
-  );
+  if (!uri) return <View style={[styles.logoPlaceholder, { backgroundColor: colors.muted }]} />;
+  return <Image source={{ uri }} style={styles.logo} resizeMode="contain" />;
 }
+
+const LOGO = 54;
 
 const styles = StyleSheet.create({
   card: {
     marginHorizontal: 16,
-    marginVertical: 5,
-    padding: 14,
-    borderWidth: 1,
-    overflow: 'hidden',
+    marginBottom: 10,
+    borderRadius: 20,
+    paddingHorizontal: 20,
+    paddingTop: 14,
+    paddingBottom: 14,
+    // iOS shadow
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.28,
+    shadowRadius: 20,
+    // Android
+    elevation: 10,
+    overflow: 'visible',
   },
-  liveStrip: {
+  liveBar: {
     position: 'absolute',
     top: 0,
     left: 0,
     right: 0,
-    height: 2,
+    height: 3,
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
   },
-  statusRow: {
+
+  // Row 1
+  row1: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    marginBottom: 12,
+    marginBottom: 14,
   },
-  liveBadge: {
+  groupText: {
+    fontSize: 12,
+    fontFamily: 'Nunito_600SemiBold',
+    letterSpacing: 0.3,
+    flex: 1,
+    textTransform: 'uppercase',
+  },
+  livePill: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-    borderRadius: 20,
-    borderWidth: 1,
+    paddingHorizontal: 9,
+    paddingVertical: 4,
+    borderRadius: 10,
     gap: 5,
   },
-  liveDot: {
-    width: 6,
-    height: 6,
-    borderRadius: 3,
-  },
-  liveText: {
-    fontSize: 11,
-    fontFamily: 'Inter_700Bold',
-  },
-  statusText: {
-    fontSize: 12,
-    fontFamily: 'Inter_600SemiBold',
-  },
-  venueRow: {
+  liveDot: { width: 5, height: 5, borderRadius: 2.5, backgroundColor: '#fff' },
+  livePillText: { color: '#fff', fontSize: 11, fontFamily: 'Nunito_800ExtraBold', letterSpacing: 0.5 },
+  ftText: { fontSize: 12, fontFamily: 'Nunito_600SemiBold' },
+  timeText: { fontSize: 14, fontFamily: 'Nunito_700Bold' },
+
+  // Row 2
+  row2: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 3,
-    flex: 1,
-    justifyContent: 'flex-end',
-    marginLeft: 8,
-  },
-  venueText: {
-    fontSize: 11,
-    fontFamily: 'Inter_400Regular',
-    flex: 1,
-    textAlign: 'right',
-  },
-  teamsRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
+    marginBottom: 12,
   },
   teamSide: {
     flex: 1,
     alignItems: 'flex-start',
-    gap: 6,
+    gap: 8,
   },
-  teamSideRight: {
-    alignItems: 'flex-end',
-  },
+  teamSideRight: { alignItems: 'flex-end' },
+  logo: { width: LOGO, height: LOGO, borderRadius: LOGO / 2 },
+  logoPlaceholder: { width: LOGO, height: LOGO, borderRadius: LOGO / 2 },
   teamName: {
     fontSize: 13,
-    fontFamily: 'Inter_600SemiBold',
     lineHeight: 17,
   },
-  teamNameRight: {
-    textAlign: 'right',
-  },
-  winnerMark: {
-    fontSize: 12,
-    fontFamily: 'Inter_700Bold',
-  },
-  scoreBox: {
-    paddingHorizontal: 12,
+  teamNameRight: { textAlign: 'right' },
+
+  // Score center
+  scoreCenter: {
     alignItems: 'center',
     justifyContent: 'center',
+    paddingHorizontal: 8,
+    minWidth: 96,
   },
-  score: {
-    fontSize: 26,
-    fontFamily: 'Inter_700Bold',
-    letterSpacing: 1,
+  scoreRow: { flexDirection: 'row', alignItems: 'center', gap: 4 },
+  scoreNum: {
+    fontSize: 36,
+    fontFamily: 'Nunito_900Black',
+    lineHeight: 42,
   },
-  ftLabel: {
-    fontSize: 10,
-    fontFamily: 'Inter_400Regular',
-    marginTop: 2,
+  scoreSep: {
+    fontSize: 24,
+    fontFamily: 'Nunito_400Regular',
+    paddingBottom: 2,
   },
-  vs: {
-    fontSize: 16,
-    fontFamily: 'Inter_600SemiBold',
-  },
-  tapHint: {
-    fontSize: 10,
-    fontFamily: 'Inter_400Regular',
-    textAlign: 'center',
-    marginTop: 10,
-    opacity: 0.6,
+  vsBox: { alignItems: 'center' },
+  vsText: { fontSize: 18, fontFamily: 'Nunito_600SemiBold' },
+
+  // Row 3
+  venueText: {
+    fontSize: 12,
+    fontFamily: 'Nunito_400Regular',
   },
 });

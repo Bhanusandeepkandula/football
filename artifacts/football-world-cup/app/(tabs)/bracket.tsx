@@ -169,8 +169,8 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
     paddingBottom: 12,
   },
-  title: { fontSize: 26, fontFamily: 'Inter_700Bold', letterSpacing: -0.5 },
-  subtitle: { fontSize: 13, fontFamily: 'Inter_400Regular', marginTop: 2 },
+  title: { fontSize: 26, fontFamily: 'Nunito_700Bold', letterSpacing: -0.5 },
+  subtitle: { fontSize: 13, fontFamily: 'Nunito_400Regular', marginTop: 2 },
 
   toggleGroup: {
     flexDirection: 'row',
@@ -193,25 +193,25 @@ const styles = StyleSheet.create({
     paddingHorizontal: 14, paddingVertical: 8,
     borderRadius: 20, borderWidth: 1, gap: 6, marginRight: 8,
   },
-  roundPillText: { fontSize: 13, fontFamily: 'Inter_600SemiBold' },
-  roundCount: { fontSize: 11, fontFamily: 'Inter_700Bold', opacity: 0.7 },
+  roundPillText: { fontSize: 13, fontFamily: 'Nunito_600SemiBold' },
+  roundCount: { fontSize: 11, fontFamily: 'Nunito_700Bold', opacity: 0.7 },
 
   centered: {
     flex: 1, alignItems: 'center', justifyContent: 'center',
     gap: 12, padding: 32,
   },
-  loadingText: { fontSize: 14, fontFamily: 'Inter_400Regular', marginTop: 8 },
-  emptyText: { fontSize: 16, fontFamily: 'Inter_500Medium', textAlign: 'center' },
-  emptySubtext: { fontSize: 13, fontFamily: 'Inter_400Regular', textAlign: 'center' },
+  loadingText: { fontSize: 14, fontFamily: 'Nunito_400Regular', marginTop: 8 },
+  emptyText: { fontSize: 16, fontFamily: 'Nunito_500Medium', textAlign: 'center' },
+  emptySubtext: { fontSize: 13, fontFamily: 'Nunito_400Regular', textAlign: 'center' },
   retryBtn: { paddingHorizontal: 24, paddingVertical: 10, borderRadius: 20 },
-  retryText: { fontSize: 14, fontFamily: 'Inter_600SemiBold' },
+  retryText: { fontSize: 14, fontFamily: 'Nunito_600SemiBold' },
 
   legendBox: {
     borderRadius: 12, borderWidth: 1, padding: 16, gap: 10,
   },
-  legendTitle: { fontSize: 14, fontFamily: 'Inter_700Bold', marginBottom: 4 },
+  legendTitle: { fontSize: 14, fontFamily: 'Nunito_700Bold', marginBottom: 4 },
   legendRow: { flexDirection: 'row', alignItems: 'center', gap: 10 },
   legendDot: { width: 10, height: 10, borderRadius: 5 },
-  legendName: { flex: 1, fontSize: 13, fontFamily: 'Inter_500Medium' },
-  legendCount: { fontSize: 12, fontFamily: 'Inter_400Regular' },
+  legendName: { flex: 1, fontSize: 13, fontFamily: 'Nunito_500Medium' },
+  legendCount: { fontSize: 12, fontFamily: 'Nunito_400Regular' },
 });

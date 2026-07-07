@@ -30,11 +30,13 @@ const TABS: { id: Tab; label: string; Icon: any }[] = [
 ];
 
 export default function MatchDetailScreen() {
-  const { id } = useLocalSearchParams<{ id: string }>();
+  const params = useLocalSearchParams();
+  // id can be string | string[] depending on platform
+  const id = typeof params.id === 'string' ? params.id : Array.isArray(params.id) ? params.id[0] : '';
   const colors = useColors();
   const insets = useSafeAreaInsets();
   const [activeTab, setActiveTab] = useState<Tab>('overview');
-  const { data, isLoading, isError, refetch } = useMatchDetail(id ?? '');
+  const { data, isLoading, isError, refetch } = useMatchDetail(id);
 
   const topPad = Platform.OS === 'web' ? Math.max(insets.top, 67) : insets.top;
   const homeColor = `#${data?.homeTeam?.color ?? '003DA5'}`;
@@ -198,7 +200,7 @@ function TeamHero({ name, logo, color, winner, right }: {
       <Text style={[styles.teamHeroName, { color: '#fff' }]} numberOfLines={2}>
         {name}
       </Text>
-      {winner && <Text style={{ color: '#F5A623', fontSize: 10, fontFamily: 'Inter_700Bold', marginTop: 2 }}>WINNER ★</Text>}
+      {winner && <Text style={{ color: '#F5A623', fontSize: 10, fontFamily: 'Nunito_700Bold', marginTop: 2 }}>WINNER ★</Text>}
     </View>
   );
 }
@@ -368,7 +370,7 @@ const styles = StyleSheet.create({
   },
   headerTitle: {
     fontSize: 16,
-    fontFamily: 'Inter_600SemiBold',
+    fontFamily: 'Nunito_600SemiBold',
   },
   centered: {
     flex: 1,
@@ -378,11 +380,11 @@ const styles = StyleSheet.create({
     minHeight: 200,
     paddingVertical: 40,
   },
-  loadingText: { fontSize: 14, fontFamily: 'Inter_400Regular', marginTop: 8 },
-  errorText: { fontSize: 15, fontFamily: 'Inter_400Regular' },
+  loadingText: { fontSize: 14, fontFamily: 'Nunito_400Regular', marginTop: 8 },
+  errorText: { fontSize: 15, fontFamily: 'Nunito_400Regular' },
   retryBtn: { paddingHorizontal: 24, paddingVertical: 10, borderRadius: 20 },
-  retryText: { fontSize: 14, fontFamily: 'Inter_600SemiBold' },
-  emptyText: { fontSize: 14, fontFamily: 'Inter_400Regular', textAlign: 'center', marginTop: 8 },
+  retryText: { fontSize: 14, fontFamily: 'Nunito_600SemiBold' },
+  emptyText: { fontSize: 14, fontFamily: 'Nunito_400Regular', textAlign: 'center', marginTop: 8 },
 
   // Hero
   hero: {
@@ -402,8 +404,8 @@ const styles = StyleSheet.create({
     gap: 6,
   },
   liveDot: { width: 7, height: 7, borderRadius: 3.5, backgroundColor: '#fff' },
-  livePillText: { color: '#fff', fontSize: 12, fontFamily: 'Inter_700Bold' },
-  statusText: { fontSize: 14, fontFamily: 'Inter_600SemiBold' },
+  livePillText: { color: '#fff', fontSize: 12, fontFamily: 'Nunito_700Bold' },
+  statusText: { fontSize: 14, fontFamily: 'Nunito_600SemiBold' },
 
   scoreRow: {
     flexDirection: 'row',
@@ -416,13 +418,13 @@ const styles = StyleSheet.create({
   teamHeroRight: { alignItems: 'center' },
   teamHeroLogo: { width: 56, height: 56, borderRadius: 28 },
   teamHeroLogoPlaceholder: { width: 56, height: 56, borderRadius: 28 },
-  teamHeroName: { fontSize: 13, fontFamily: 'Inter_600SemiBold', textAlign: 'center' },
+  teamHeroName: { fontSize: 13, fontFamily: 'Nunito_600SemiBold', textAlign: 'center' },
   scoreCenter: { alignItems: 'center', flexDirection: 'row', gap: 4, paddingHorizontal: 8 },
-  scoreBig: { fontSize: 40, fontFamily: 'Inter_700Bold', lineHeight: 48 },
-  scoreSep: { fontSize: 28, fontFamily: 'Inter_400Regular', paddingHorizontal: 4 },
+  scoreBig: { fontSize: 40, fontFamily: 'Nunito_700Bold', lineHeight: 48 },
+  scoreSep: { fontSize: 28, fontFamily: 'Nunito_400Regular', paddingHorizontal: 4 },
 
   venueRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 4, paddingBottom: 12 },
-  venueText: { fontSize: 12, fontFamily: 'Inter_400Regular' },
+  venueText: { fontSize: 12, fontFamily: 'Nunito_400Regular' },
 
   colorBar: { flexDirection: 'row', height: 4 },
   colorBarHome: { flex: 1 },
@@ -445,7 +447,7 @@ const styles = StyleSheet.create({
     borderBottomWidth: 2,
     borderBottomColor: 'transparent',
   },
-  tabText: { fontSize: 11, fontFamily: 'Inter_600SemiBold' },
+  tabText: { fontSize: 11, fontFamily: 'Nunito_600SemiBold' },
 
   // Toggle
   toggleRow: { flexDirection: 'row', justifyContent: 'center', gap: 8, paddingHorizontal: 16 },
@@ -453,7 +455,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16, paddingVertical: 8,
     borderRadius: 20, borderWidth: 1,
   },
-  toggleText: { fontSize: 13, fontFamily: 'Inter_600SemiBold' },
+  toggleText: { fontSize: 13, fontFamily: 'Nunito_600SemiBold' },
 
   // Player list
   playerSectionHeader: {
@@ -464,7 +466,7 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   playerSectionDot: { width: 8, height: 8, borderRadius: 4 },
-  playerSectionTitle: { fontSize: 13, fontFamily: 'Inter_700Bold' },
+  playerSectionTitle: { fontSize: 13, fontFamily: 'Nunito_700Bold' },
   playerRow: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -487,16 +489,16 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  playerAvatarText: { fontSize: 12, fontFamily: 'Inter_700Bold' },
+  playerAvatarText: { fontSize: 12, fontFamily: 'Nunito_700Bold' },
   playerInfo: { flex: 1 },
-  jerseyCell: { width: 26, fontSize: 14, fontFamily: 'Inter_700Bold', textAlign: 'center' },
-  posCell: { fontSize: 11, fontFamily: 'Inter_400Regular' },
-  nameCell: { fontSize: 13, fontFamily: 'Inter_500Medium' },
-  statBadge: { fontSize: 12, fontFamily: 'Inter_600SemiBold' },
+  jerseyCell: { width: 26, fontSize: 14, fontFamily: 'Nunito_700Bold', textAlign: 'center' },
+  posCell: { fontSize: 11, fontFamily: 'Nunito_400Regular' },
+  nameCell: { fontSize: 13, fontFamily: 'Nunito_500Medium' },
+  statBadge: { fontSize: 12, fontFamily: 'Nunito_600SemiBold' },
   cardBadge: { marginLeft: 2 },
   cardIndicator: { width: 10, height: 14, borderRadius: 2 },
 
   // Section header
   sectionHeader: { paddingHorizontal: 16, paddingVertical: 10, borderBottomWidth: StyleSheet.hairlineWidth },
-  sectionTitle: { fontSize: 11, fontFamily: 'Inter_600SemiBold', letterSpacing: 1 },
+  sectionTitle: { fontSize: 11, fontFamily: 'Nunito_600SemiBold', letterSpacing: 1 },
 });

@@ -186,7 +186,7 @@ const styles = StyleSheet.create({
   badgeText: {
     color: '#8899AA',
     fontSize: 7,
-    fontFamily: 'Inter_700Bold',
+    fontFamily: 'Nunito_700Bold',
   },
   trophy: {
     position: 'absolute',
