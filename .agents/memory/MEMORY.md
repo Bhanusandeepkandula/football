@@ -1,0 +1,1 @@
+- [ESPN soccer summary API shape](espn-soccer-summary-api.md) — lineups live in `rosters` (not boxscore.players), events in `keyEvents` (not plays); stats use ESPN-specific names.

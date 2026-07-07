@@ -62,13 +62,28 @@ export interface MatchDetail {
   stats: MatchStat[];
 }
 
-function getPositionGroup(abbr: string): MatchPlayer['positionGroup'] {
-  const a = (abbr ?? '').toUpperCase();
-  if (a === 'GK' || a === 'G' || a === 'P') return 'GK';
-  if (['CB', 'LB', 'RB', 'LWB', 'RWB', 'SW', 'DF', 'D', 'WB'].some(p => a === p || a.startsWith(p))) return 'DF';
-  if (['CM', 'CDM', 'CAM', 'LM', 'RM', 'DM', 'AM', 'MF', 'M', 'MD'].some(p => a === p || a.startsWith(p))) return 'MF';
-  return 'FW';
+// ESPN's soccer roster feed has no per-player position, only a `formation`
+// string ("4-1-3-2") and each player's `formationPlace` (1 = GK). Derive the
+// position group by walking the formation lines: first outfield line = DF,
+// last = FW, everything between = MF.
+function buildFormationMap(formationStr: string): Record<number, MatchPlayer['positionGroup']> {
+  const map: Record<number, MatchPlayer['positionGroup']> = { 1: 'GK' };
+  const lines = (formationStr ?? '').split('-').map((n) => parseInt(n, 10)).filter((n) => n > 0);
+  let place = 2;
+  lines.forEach((count, idx) => {
+    const group: MatchPlayer['positionGroup'] =
+      idx === 0 ? 'DF' : idx === lines.length - 1 ? 'FW' : 'MF';
+    for (let i = 0; i < count && place <= 11; i++) map[place++] = group;
+  });
+  return map;
 }
+
+const POSITION_LABEL: Record<MatchPlayer['positionGroup'], string> = {
+  GK: 'GK',
+  DF: 'DEF',
+  MF: 'MID',
+  FW: 'FWD',
+};
 
 function parseEventType(text: string, typeText?: string): MatchEventType {
   const t = `${text} ${typeText ?? ''}`.toLowerCase();
@@ -82,17 +97,17 @@ function parseEventType(text: string, typeText?: string): MatchEventType {
 
 const STAT_KEYS = [
   { key: 'possessionPct', label: 'Possession %' },
-  { key: 'totalShots', label: 'Total Shots' },
+  { key: 'totalShots', label: 'Shots' },
   { key: 'shotsOnTarget', label: 'Shots on Target' },
+  { key: 'wonCorners', label: 'Corners' },
   { key: 'saves', label: 'Saves' },
-  { key: 'corners', label: 'Corners' },
-  { key: 'fouls', label: 'Fouls' },
+  { key: 'foulsCommitted', label: 'Fouls' },
   { key: 'yellowCards', label: 'Yellow Cards' },
   { key: 'redCards', label: 'Red Cards' },
   { key: 'offsides', label: 'Offsides' },
-  { key: 'passesAccurate', label: 'Passes Accurate' },
-  { key: 'passAccuracy', label: 'Pass Accuracy' },
-  { key: 'tackles', label: 'Tackles' },
+  { key: 'totalPasses', label: 'Passes' },
+  { key: 'accuratePasses', label: 'Accurate Passes' },
+  { key: 'totalTackles', label: 'Tackles' },
   { key: 'interceptions', label: 'Interceptions' },
 ];
 
@@ -109,65 +124,86 @@ export function useMatchDetail(eventId: string) {
       const statusType = header?.status?.type ?? {};
 
       // ── Lineups ──────────────────────────────────────────────────────────
+      // ESPN exposes lineups under `rosters`, NOT `boxscore.players`.
       let lineups: MatchDetail['lineups'] = null;
-      const boxPlayers: any[] = data.boxscore?.players ?? [];
-      if (boxPlayers.length >= 2) {
+      const rosters: any[] = data.rosters ?? [];
+      if (rosters.length >= 2) {
         const parseLineup = (entry: any): MatchTeamLineup => {
-          const athletes: MatchPlayer[] = (entry.athletes ?? []).map((a: any) => {
-            const ath = a.athlete ?? {};
-            const posAbbr: string = ath.position?.abbreviation ?? ath.position?.name ?? '';
+          const formationStr: string = entry.formation ?? '';
+          const placeToGroup = buildFormationMap(formationStr);
+          const players: MatchPlayer[] = (entry.roster ?? []).map((r: any) => {
+            const ath = r.athlete ?? {};
             const statsMap: Record<string, string> = {};
-            (a.statistics ?? []).forEach((s: any) => {
+            (r.stats ?? []).forEach((s: any) => {
               if (s.name) statsMap[s.name] = s.displayValue ?? String(s.value ?? '');
             });
+            const place: number = r.formationPlace ?? 0;
+            const group: MatchPlayer['positionGroup'] = placeToGroup[place] ?? 'MF';
             return {
               id: ath.id ?? '',
               displayName: ath.shortName ?? ath.displayName ?? 'Player',
-              jersey: ath.jersey ?? '',
-              position: posAbbr,
-              positionGroup: getPositionGroup(posAbbr),
+              jersey: r.jersey ?? ath.jersey ?? '',
+              position: r.starter ? POSITION_LABEL[group] : 'SUB',
+              positionGroup: group,
               headshot: ath.headshot?.href,
-              starter: a.starter ?? false,
+              starter: r.starter ?? false,
               stats: statsMap,
             };
           });
           const t = entry.team ?? {};
           return {
-            team: { id: t.id ?? '', displayName: t.displayName ?? '', logo: t.logo ?? '', color: t.color ?? '003DA5' },
-            formation: entry.formation?.displayName,
-            starters: athletes.filter(a => a.starter),
-            bench: athletes.filter(a => !a.starter),
+            team: {
+              id: t.id ?? '',
+              displayName: t.displayName ?? '',
+              logo: t.logos?.[0]?.href ?? t.logo ?? '',
+              color: t.color ?? '003DA5',
+            },
+            formation: formationStr || undefined,
+            starters: players.filter((p) => p.starter),
+            bench: players.filter((p) => !p.starter),
           };
         };
-        const lp0 = parseLineup(boxPlayers[0]);
-        const lp1 = parseLineup(boxPlayers[1]);
-        const homeLP = lp0.team.id === home?.team?.id ? lp0 : lp1;
-        const awayLP = lp0.team.id === home?.team?.id ? lp1 : lp0;
+        const lp0 = parseLineup(rosters[0]);
+        const lp1 = parseLineup(rosters[1]);
+        // Resolve home/away deterministically: explicit homeAway flag first,
+        // then strict team-id match, then preserve roster order (index 0 = home).
+        let zeroIsHome: boolean;
+        if (rosters[0].homeAway === 'home' || rosters[1].homeAway === 'away') {
+          zeroIsHome = true;
+        } else if (rosters[0].homeAway === 'away' || rosters[1].homeAway === 'home') {
+          zeroIsHome = false;
+        } else if (lp0.team.id && home?.team?.id) {
+          zeroIsHome = lp0.team.id === home.team.id || lp1.team.id !== home.team.id;
+        } else {
+          zeroIsHome = true;
+        }
+        const homeLP = zeroIsHome ? lp0 : lp1;
+        const awayLP = zeroIsHome ? lp1 : lp0;
         lineups = [homeLP, awayLP];
       }
 
       // ── Events ───────────────────────────────────────────────────────────
-      const events: MatchEvent[] = (data.plays ?? [])
+      // ESPN exposes match events under `keyEvents`, NOT `plays`.
+      const events: MatchEvent[] = (data.keyEvents ?? [])
         .filter((p: any) => {
-          const txt = (p.text ?? '').toLowerCase();
-          const typ = (p.type?.text ?? '').toLowerCase();
+          const s = `${p.type?.text ?? ''} ${p.type?.type ?? ''}`.toLowerCase();
           return (
             p.scoringPlay ||
-            txt.includes('goal') ||
-            txt.includes('yellow') ||
-            txt.includes('red card') ||
-            txt.includes('substitut') ||
-            txt.includes('var') ||
-            typ.includes('goal') ||
-            typ.includes('card')
+            s.includes('goal') ||
+            s.includes('yellow') ||
+            s.includes('red') ||
+            s.includes('card') ||
+            s.includes('substitut') ||
+            s.includes('penalty') ||
+            s.includes('var')
           );
         })
         .map((p: any, i: number) => ({
           id: p.id ?? String(i),
           clock: p.clock?.displayValue ?? '',
           period: p.period?.number ?? 1,
-          type: parseEventType(p.text ?? '', p.type?.text),
-          text: p.text ?? '',
+          type: parseEventType(p.type?.text ?? p.text ?? '', p.type?.type),
+          text: p.shortText ?? p.text ?? '',
           teamId: p.team?.id,
           playerName: p.participants?.[0]?.athlete?.displayName ?? '',
         }));
