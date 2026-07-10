@@ -3,6 +3,8 @@ import { useQueries } from '@tanstack/react-query';
 import { siteBase, espnFetch } from '@/lib/espn';
 import { LEAGUES, League } from '@/config/leagues';
 import { EspnEvent } from '@/hooks/useWorldCup';
+import { getScoreboard } from '@/lib/api/client';
+import { matchSummaryToEspnEvent } from '@/lib/api/adapters';
 
 // Priority order for the aggregated home feed + the league filter rail. The
 // World Cup leads (it's the marquee competition), then the biggest club
@@ -40,7 +42,20 @@ export function useMultiLeagueScoreboard(dateStr: string, enabled = true) {
   const results = useQueries({
     queries: ORDERED_LEAGUES.map((l) => ({
       queryKey: ['scoreboard', l.slug, dateStr] as const,
-      queryFn: () => espnFetch(`${siteBase(l.slug)}/scoreboard?dates=${dateStr}`),
+      // Fan out over the backend's per-league scoreboard and adapt each
+      // MatchSummary back into the app's EspnEvent contract. Shares the cache
+      // key + adapter with `useScoreboard`, so the active league resolves to a
+      // byte-identical payload whether it's fetched here or on its own tab.
+      queryFn: async ({ signal }): Promise<{ events: EspnEvent[]; leagues: any[] }> => {
+        try {
+          const scoreboard = await getScoreboard(l.slug, dateStr, { signal });
+          return { events: scoreboard.matches.map(matchSummaryToEspnEvent), leagues: [] };
+        } catch {
+          // Backend unreachable → fall back to hitting ESPN's public scoreboard
+          // directly (the app's original data path) so the home feed still fills.
+          return espnFetch(`${siteBase(l.slug)}/scoreboard?dates=${dateStr}`);
+        }
+      },
       enabled,
       staleTime: 20_000,
       // Poll the whole board while anything is in play; the per-card Polymarket

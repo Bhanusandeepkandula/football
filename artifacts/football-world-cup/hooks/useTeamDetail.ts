@@ -1,6 +1,7 @@
 import { useQuery } from '@tanstack/react-query';
 import { siteBase, coreBase, webBase, getActiveSlug, getLeagueSeason } from '@/lib/espn';
 import { useLeague } from '@/hooks/useLeague';
+import { getTeamDetail } from '@/lib/api/client';
 
 async function espnFetch(url: string) {
   const res = await fetch(url);
@@ -139,7 +140,27 @@ function entryStat(entry: any, name: string): { value: number; displayValue: str
   return st ? { value: Number(st.value ?? 0), displayValue: String(st.displayValue ?? st.value ?? '') } : undefined;
 }
 
+/**
+ * Backend-first team page fetch. Calls the @matchcenter/api service and adapts
+ * its DTO to the exported `TeamDetail` shape (the backend payload is
+ * field-identical apart from an extra `league` ref, which is dropped). On any
+ * failure it falls back to the direct-ESPN path in `fetchTeamDetailEspn`.
+ */
 export async function fetchTeamDetail(teamId: string, slug: string = getActiveSlug()): Promise<TeamDetail> {
+  try {
+    const d = await getTeamDetail(slug, teamId);
+    // Drop the extra backend `league` field; every other field maps
+    // one-to-one onto the app's TeamDetail (roster/fixtures/form/nextMatch/
+    // group/stats/leaders all match verbatim).
+    const { league: _league, ...rest } = d;
+    return rest;
+  } catch {
+    return fetchTeamDetailEspn(teamId, slug);
+  }
+}
+
+/** Legacy direct-to-ESPN fallback (retained as the safety path). */
+async function fetchTeamDetailEspn(teamId: string, slug: string = getActiveSlug()): Promise<TeamDetail> {
       const season = await getLeagueSeason(slug);
       const [teamRes, rosterRes, schedRes, statsRes, standingsRes] = await Promise.all([
         espnFetch(`${siteBase(slug)}/teams/${teamId}`),

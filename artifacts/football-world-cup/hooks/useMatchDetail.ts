@@ -1,6 +1,8 @@
 import { useQuery } from '@tanstack/react-query';
 import { siteBase, coreBase, getActiveSlug } from '@/lib/espn';
 import { useLeague } from '@/hooks/useLeague';
+import { getMatchDetail } from '@/lib/api/client';
+import type { MatchDetail as ApiMatchDetail, MatchDetailSide } from '@/lib/api/types';
 
 // The espn.com HTML pages are keyed by gameId only (league-agnostic), so these
 // stay constant across competitions.
@@ -1157,7 +1159,74 @@ async function buildMatchPreview(
   return { headToHead, recentForm, leaders, teamStats };
 }
 
+// ─── Backend DTO → app MatchDetail adapter ────────────────────────────────────
+// The @matchcenter/api service returns a MatchDetail DTO (lib/api/types.ts) that
+// already normalizes ESPN + the HTML scrapes server-side. It differs from the
+// app's local MatchDetail in only two spots: it carries an extra `league` ref
+// (dropped here) and its team sides use `name` where the app uses `displayName`.
+// Everything else — status/clock, lineups, events, stats, shots, playerStats,
+// commentary/allPlays, news, gamecast (cards + odds + winProbability) and preview
+// — is field-for-field identical. Because the score/clock/events/period and
+// preview.teamStats survive verbatim, the on-device win-probability models in
+// GamecastPanel and the match screen keep running unchanged, now fed by the DTO.
+function adaptMatchDetailSide(side: MatchDetailSide): MatchDetail['homeTeam'] {
+  // Rename `name`→`displayName`; every other field is a straight passthrough.
+  return {
+    id: side.id,
+    displayName: side.name,
+    abbreviation: side.abbreviation,
+    logo: side.logo,
+    score: side.score,
+    color: side.color,
+    alternateColor: side.alternateColor,
+    shootout: side.shootout,
+  };
+}
+
+function adaptMatchDetail(dto: ApiMatchDetail): MatchDetail {
+  // Drop the backend-only `league` ref; spread the rest (status, clock, venue,
+  // date, round, referee, attendance, lineups, events, stats, shots, playerStats,
+  // commentary, allPlays, news, shootout, resultSuffix …) field-for-field.
+  const { league: _league, homeTeam, awayTeam, gamecast, preview, ...rest } = dto;
+  void _league;
+  return {
+    ...rest,
+    homeTeam: adaptMatchDetailSide(homeTeam),
+    awayTeam: adaptMatchDetailSide(awayTeam),
+    gamecast: {
+      cards: gamecast.cards,
+      // `odds` is under-typed on the wire (Record<string,unknown>[]) but the
+      // server ran the app's own odds normalizer, so it already matches MatchOdds.
+      odds: gamecast.odds as unknown as MatchOdds[],
+      winProbability: gamecast.winProbability,
+    },
+    // MatchPreview is loosely typed on the wire (headToHead/recentForm/leaders as
+    // Record<string,unknown>) but the server emitted the app's structured shape.
+    preview: preview as unknown as MatchPreview | undefined,
+  };
+}
+
+/**
+ * Primary path: fetch the normalized MatchDetail from the @matchcenter/api
+ * backend (GET /v1/:league/matches/:id) and adapt it to the app's local
+ * MatchDetail shape. On ANY backend failure — unreachable dev server, timeout,
+ * non-2xx — fall back to the direct ESPN summary + HTML-scrape path retained
+ * below, so a device that can't reach the backend still renders the match.
+ * React Query remains the caching layer (see matchDetailQueryOptions).
+ */
 export async function fetchMatchDetail(eventId: string, slug: string = getActiveSlug()): Promise<MatchDetail> {
+  try {
+    const dto = await getMatchDetail(slug, eventId);
+    return adaptMatchDetail(dto);
+  } catch {
+    return fetchMatchDetailEspn(eventId, slug);
+  }
+}
+
+// ─── ESPN direct + HTML-scrape fallback ───────────────────────────────────────
+// Retained verbatim as the degraded/offline fallback for fetchMatchDetail above.
+// Do not delete: this is the only path when the backend is unreachable.
+async function fetchMatchDetailEspn(eventId: string, slug: string = getActiveSlug()): Promise<MatchDetail> {
       const data = await espnFetch(`${siteBase(slug)}/summary?event=${eventId}`);
 
       const header = data.header?.competitions?.[0];

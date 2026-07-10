@@ -203,7 +203,9 @@ export default function MatchDetailScreen() {
     `${data?.displayClock ?? ''}|${data?.period ?? ''}|${data?.status ?? ''}`,
   );
 
-  const topPad = Platform.OS === 'web' ? Math.max(insets.top, 67) : insets.top;
+  // Presented as a sheet — inside a sheet the top safe-area inset is ~0, so floor
+  // it a little to clear the OS grabber and give the header room to breathe.
+  const topPad = Platform.OS === 'web' ? Math.max(insets.top, 67) : Math.max(insets.top, 16);
   const { homeColor, awayColor, vizHome, vizAway } = useTeamAccentColors(data?.homeTeam, data?.awayTeam);
 
   // Mirror a live match into the iOS Dynamic Island / Live Activity (no-op unless

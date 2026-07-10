@@ -1,14 +1,18 @@
 import { useEffect, useRef } from 'react';
+import { liveClient } from '@/lib/api/live';
 import { connectMatchFastcast } from '@/lib/fastcast';
 import { useLeague } from '@/hooks/useLeague';
+import { frameMatchId } from '@/hooks/usePolymarketLive';
 import type { PolymarketMatchRef } from '@/lib/polymarketSports';
-import { isPolymarketLiveFresh } from '@/lib/polymarketLiveStore';
 
 const FALLBACK_POLL_MS = 8_000;
 
 /**
- * ESPN Fastcast + faster REST polling only when Polymarket isn't delivering
- * fresh live data for this match.
+ * Nudges the match-detail query to refetch when the live match changes. Primary
+ * source is the @matchcenter backend WebSocket (this hook already has the event
+ * id + league it needs to address it directly); the ESPN Fastcast socket + a
+ * slow REST poll are kept as a safety net that only runs while the backend WS is
+ * disconnected. `onRefresh` calls are debounced ~1.5s to coalesce bursts.
  */
 export function useEspnLiveFallback(
   eventId: string | undefined,
@@ -24,29 +28,44 @@ export function useEspnLiveFallback(
   const last = useRef(0);
 
   const fire = () => {
-    if (ref && isPolymarketLiveFresh(ref)) return;
     const now = Date.now();
     if (now - last.current < 1500) return;
     last.current = now;
     cb.current();
   };
 
-  // Fastcast nudges ESPN when Polymarket is stale.
+  // Primary: backend live WS. Any score/event/state frame for this match means
+  // the detail payload changed — refetch it.
   useEffect(() => {
     if (!eventId || !espnIsLive) return;
-    const fastcast = connectMatchFastcast(eventId, slug, fire);
+    try {
+      const handle = liveClient.watchMatch(slug, eventId, (msg) => {
+        if (frameMatchId(msg) !== eventId) return;
+        if (msg.type === 'score' || msg.type === 'event' || msg.type === 'state') fire();
+      });
+      return () => handle.close();
+    } catch {
+      // fall through to the Fastcast fallback effect below
+    }
+  }, [eventId, espnIsLive, slug]);
+
+  // Fallback: ESPN Fastcast nudges only while the backend WS is down.
+  useEffect(() => {
+    if (!eventId || !espnIsLive) return;
+    const fastcast = connectMatchFastcast(eventId, slug, () => {
+      if (liveClient.isConnected()) return;
+      fire();
+    });
     return () => fastcast.close();
   }, [eventId, espnIsLive, slug]);
 
-  // Slow background poll while Polymarket is fresh; faster when it's not.
+  // Fallback: slow REST poll only while the backend WS is down.
   useEffect(() => {
     if (!espnIsLive) return;
-    const tick = () => {
-      const fresh = ref ? isPolymarketLiveFresh(ref) : false;
-      if (!fresh) fire();
-    };
-    const ms = ref && isPolymarketLiveFresh(ref) ? 45_000 : FALLBACK_POLL_MS;
-    const id = setInterval(tick, ms);
+    const id = setInterval(() => {
+      if (liveClient.isConnected()) return;
+      fire();
+    }, FALLBACK_POLL_MS);
     return () => clearInterval(id);
-  }, [espnIsLive, ref?.homeAbbr, ref?.awayAbbr, ref?.date]);
+  }, [espnIsLive]);
 }

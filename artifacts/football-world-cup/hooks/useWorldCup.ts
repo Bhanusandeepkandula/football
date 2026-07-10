@@ -2,6 +2,18 @@ import { useQuery, keepPreviousData } from '@tanstack/react-query';
 import { siteBase, coreBase, webBase, espnFetch } from '@/lib/espn';
 import { useLeague, useLeagueSeason } from '@/hooks/useLeague';
 import { hasBracket as leagueHasBracket } from '@/config/leagues';
+import { getScoreboard, getUpcoming, getStandings, getTeams, getBracket } from '@/lib/api/client';
+// Backend DTO → ESPN-shape adapters live in lib/api/adapters (the single source
+// of truth so useScoreboard/useUpcomingMatches/useBracket here and
+// useMultiLeagueScoreboard emit byte-identical objects for the shared
+// ['scoreboard', slug, dates] cache key). Re-exported below so this hook's
+// public surface is unchanged.
+import {
+  matchSummaryToEspnEvent,
+  sideToEspnTeam,
+  toEspnStandingEntry,
+  toEspnFullTeam,
+} from '@/lib/api/adapters';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -78,6 +90,14 @@ export interface EspnFullTeam {
   location?: string;
 }
 
+// ─── Backend → ESPN-shape adapters (re-exported from lib/api/adapters) ─────────
+// The definitions live in lib/api/adapters — the single source of truth so this
+// hook and useMultiLeagueScoreboard produce byte-identical objects for the shared
+// ['scoreboard', slug, dates] cache key. Re-exported here to keep this module's
+// public surface (matchSummaryToEspnEvent / sideToEspnTeam / toEspnStandingEntry /
+// toEspnFullTeam) unchanged for any existing importer.
+export { matchSummaryToEspnEvent, sideToEspnTeam, toEspnStandingEntry, toEspnFullTeam };
+
 // ─── Date helpers ─────────────────────────────────────────────────────────────
 
 function ymd(d: Date): string {
@@ -97,7 +117,16 @@ export function useScoreboard(dates?: string) {
     : `${siteBase(slug)}/scoreboard`;
   return useQuery<{ events: EspnEvent[]; leagues: any[] }>({
     queryKey: ['scoreboard', slug, dates ?? 'today'],
-    queryFn: () => espnFetch(url),
+    queryFn: async ({ signal }) => {
+      try {
+        const scoreboard = await getScoreboard(slug, dates, { signal });
+        return { events: scoreboard.matches.map(matchSummaryToEspnEvent), leagues: [] };
+      } catch (err) {
+        // Backend unreachable → fall back to hitting ESPN directly.
+        if (__DEV__) console.warn('[useScoreboard] backend failed, falling back to ESPN', err);
+        return espnFetch(url);
+      }
+    },
     // Polymarket drives instant scores; ESPN refreshes in the background.
     refetchInterval: (query) => ((query.state.data?.events ?? []).some(isLive) ? 45_000 : 120_000),
     staleTime: 10_000,
@@ -117,13 +146,21 @@ export function useUpcomingMatches(fromDate?: string, enabled = true) {
   return useQuery<{ events: EspnEvent[]; leagues: any[] }>({
     queryKey: ['scoreboard', slug, 'upcoming', startDate],
     enabled,
-    queryFn: async () => {
-      const data = await espnFetch(`${siteBase(slug)}/scoreboard?dates=${startDate}-${endDate}&limit=400`);
-      const events: EspnEvent[] = (data.events ?? [])
-        .filter((event: EspnEvent) => !hasStarted(event))
-        .sort((a: EspnEvent, b: EspnEvent) => new Date(a.date).getTime() - new Date(b.date).getTime())
-        .slice(0, 8);
-      return { events, leagues: data.leagues ?? [] };
+    queryFn: async ({ signal }) => {
+      try {
+        // Backend already filters out started fixtures, sorts ascending and
+        // slices to ≤8 — so the adapter is a straight passthrough.
+        const matches = await getUpcoming(slug, startDate, { signal });
+        return { events: matches.map(matchSummaryToEspnEvent), leagues: [] };
+      } catch (err) {
+        if (__DEV__) console.warn('[useUpcomingMatches] backend failed, falling back to ESPN', err);
+        const data = await espnFetch(`${siteBase(slug)}/scoreboard?dates=${startDate}-${endDate}&limit=400`);
+        const events: EspnEvent[] = (data.events ?? [])
+          .filter((event: EspnEvent) => !hasStarted(event))
+          .sort((a: EspnEvent, b: EspnEvent) => new Date(a.date).getTime() - new Date(b.date).getTime())
+          .slice(0, 8);
+        return { events, leagues: data.leagues ?? [] };
+      }
     },
     // Upcoming fixtures are effectively static — refresh occasionally, not every minute.
     refetchInterval: 5 * 60_000,
@@ -143,55 +180,81 @@ export function useStandings() {
   return useQuery<{ children: EspnGroup[] }>({
     queryKey: ['standings', slug, season],
     enabled: season != null,
-    queryFn: async () => {
-      const data = await espnFetch(`${webBase(slug)}/standings?season=${season}`);
-      const rawChildren: any[] = data?.children?.length
-        ? data.children
-        : data?.standings
-          ? [{ name: data?.name ?? '', abbreviation: data?.abbreviation ?? '', standings: data.standings }]
-          : [];
-
-      const children: EspnGroup[] = rawChildren
-        .map((child: any): EspnGroup | null => {
-          const entries: EspnStandingEntry[] = (child?.standings?.entries ?? []).map((e: any) => {
-            const tm = e.team ?? {};
-            const logo = tm.logos?.[0]?.href ?? tm.logo ?? '';
-            return {
-              team: {
-                id: String(tm.id ?? ''),
-                displayName: tm.displayName ?? tm.name ?? '',
-                abbreviation: tm.abbreviation ?? '',
-                logo,
-                color: tm.color,
-              },
-              stats: (e.stats ?? []).map((s: any) => ({
-                name: s.name,
-                value: Number(s.value ?? 0),
-                displayValue: s.displayValue ?? String(s.value ?? ''),
-              })),
-              note: e.note ? { color: e.note.color, description: e.note.description } : undefined,
-            };
-          });
-          if (entries.length === 0) return null;
+    queryFn: async ({ signal }) => {
+      try {
+        const standings = await getStandings(slug, season, { signal });
+        if (!standings.groups?.length) throw new Error('Backend returned no standings groups');
+        const children: EspnGroup[] = standings.groups.map((g) => {
+          const entries = g.entries.map(toEspnStandingEntry);
           entries.sort((a, b) => {
             const ra = Number(a.stats.find((s) => s.name === 'rank')?.value ?? 99);
             const rb = Number(b.stats.find((s) => s.name === 'rank')?.value ?? 99);
             return ra - rb;
           });
           return {
-            name: child?.name ?? '',
-            abbreviation: child?.abbreviation ?? child?.name ?? '',
+            name: g.name,
+            abbreviation: g.abbreviation || g.name,
             standings: { entries },
           };
-        })
-        .filter((g): g is EspnGroup => g != null);
-
-      if (children.length === 0) throw new Error('Failed to load standings');
-      return { children };
+        });
+        return { children };
+      } catch (err) {
+        if (__DEV__) console.warn('[useStandings] backend failed, falling back to ESPN', err);
+        return fetchEspnStandings(slug, season);
+      }
     },
     staleTime: 10 * 60_000,
     refetchOnMount: false,
   });
+}
+
+// ESPN fallback for standings — the original direct-fetch path, kept as a safety
+// net if the backend is unreachable.
+async function fetchEspnStandings(slug: string, season: number | undefined): Promise<{ children: EspnGroup[] }> {
+  const data = await espnFetch(`${webBase(slug)}/standings?season=${season}`);
+  const rawChildren: any[] = data?.children?.length
+    ? data.children
+    : data?.standings
+      ? [{ name: data?.name ?? '', abbreviation: data?.abbreviation ?? '', standings: data.standings }]
+      : [];
+
+  const children: EspnGroup[] = rawChildren
+    .map((child: any): EspnGroup | null => {
+      const entries: EspnStandingEntry[] = (child?.standings?.entries ?? []).map((e: any) => {
+        const tm = e.team ?? {};
+        const logo = tm.logos?.[0]?.href ?? tm.logo ?? '';
+        return {
+          team: {
+            id: String(tm.id ?? ''),
+            displayName: tm.displayName ?? tm.name ?? '',
+            abbreviation: tm.abbreviation ?? '',
+            logo,
+            color: tm.color,
+          },
+          stats: (e.stats ?? []).map((s: any) => ({
+            name: s.name,
+            value: Number(s.value ?? 0),
+            displayValue: s.displayValue ?? String(s.value ?? ''),
+          })),
+          note: e.note ? { color: e.note.color, description: e.note.description } : undefined,
+        };
+      });
+      if (entries.length === 0) return null;
+      entries.sort((a, b) => {
+        const ra = Number(a.stats.find((s) => s.name === 'rank')?.value ?? 99);
+        const rb = Number(b.stats.find((s) => s.name === 'rank')?.value ?? 99);
+        return ra - rb;
+      });
+      return {
+        name: child?.name ?? '',
+        abbreviation: child?.abbreviation ?? child?.name ?? '',
+        standings: { entries },
+      };
+    })
+    .filter((g): g is EspnGroup => g != null);
+
+  if (children.length === 0) throw new Error('Failed to load standings');
+  return { children };
 }
 
 // ─── Teams ────────────────────────────────────────────────────────────────────
@@ -200,7 +263,15 @@ export function useTeams() {
   const { slug } = useLeague();
   return useQuery<{ sports: { leagues: { teams: { team: EspnFullTeam }[] }[] }[] }>({
     queryKey: ['teams', slug],
-    queryFn: () => espnFetch(`${siteBase(slug)}/teams?limit=100`),
+    queryFn: async ({ signal }) => {
+      try {
+        const teams = await getTeams(slug, { signal });
+        return { sports: [{ leagues: [{ teams: teams.map((t) => ({ team: toEspnFullTeam(t) })) }] }] };
+      } catch (err) {
+        if (__DEV__) console.warn('[useTeams] backend failed, falling back to ESPN', err);
+        return espnFetch(`${siteBase(slug)}/teams?limit=100`);
+      }
+    },
     // The team list is static for a season — don't refetch on mount.
     staleTime: 300_000,
     refetchOnMount: false,
@@ -236,45 +307,20 @@ export function useBracket() {
     queryKey: ['bracket', slug, season],
     // Only competitions with a knockout stage have a bracket at all.
     enabled: season != null && leagueHasBracket(league),
-    queryFn: async () => {
-      // ESPN's `dates=YYYY` returns a CALENDAR year, not a season — and a season
-      // spans two calendar years (e.g. a 2025-26 cup plays its group/league phase
-      // in 2025 and its knockouts in 2026). So we pull both calendar years and
-      // keep only events whose `season.year` matches this competition's current
-      // season. (A single wide date range would trip ESPN's ~1-year limit → 400.)
-      // `enabled` guarantees season is defined by the time the query runs.
-      const yr = season!;
-      const [curYear, nextYear] = await Promise.all([
-        espnFetch(`${siteBase(slug)}/scoreboard?dates=${yr}&limit=1000`),
-        espnFetch(`${siteBase(slug)}/scoreboard?dates=${yr + 1}&limit=1000`).catch(() => ({ events: [] })),
-      ]);
-      const byId = new Map<string, EspnEvent>();
-      for (const ev of [...(curYear.events ?? []), ...(nextYear.events ?? [])] as EspnEvent[]) {
-        // Filter to the current season and dedupe (an event can appear in both
-        // calendar-year queries near a year boundary).
-        if (ev.season?.year === yr) byId.set(ev.id, ev);
+    queryFn: async ({ signal }) => {
+      try {
+        // Backend already orders rounds chronologically (by `order`) and sorts
+        // each round's matches — so the adapter is a straight passthrough.
+        const bracket = await getBracket(slug, season, { signal });
+        const rounds: BracketRound[] = bracket.rounds.map((r) => ({
+          name: r.name,
+          events: r.matches.map(matchSummaryToEspnEvent),
+        }));
+        return { rounds };
+      } catch (err) {
+        if (__DEV__) console.warn('[useBracket] backend failed, falling back to ESPN', err);
+        return fetchEspnBracket(slug, season!);
       }
-      const events: EspnEvent[] = [...byId.values()];
-
-      const bySlug: Record<string, EspnEvent[]> = {};
-      for (const ev of events) {
-        const roundSlug = ev.season?.slug ?? '';
-        if (!roundSlug || NON_KNOCKOUT_SLUGS.has(roundSlug)) continue;
-        (bySlug[roundSlug] ??= []).push(ev);
-      }
-
-      // Order rounds chronologically by their earliest fixture (knockout rounds
-      // happen in sequence), so this works for any competition's round naming.
-      const rounds: BracketRound[] = Object.entries(bySlug)
-        .map(([roundSlug, evs]) => ({
-          name: prettifyRound(roundSlug),
-          events: evs.sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime()),
-          _min: Math.min(...evs.map((e) => new Date(e.date).getTime())),
-        }))
-        .sort((a, b) => a._min - b._min)
-        .map(({ name, events }) => ({ name, events }));
-
-      return { rounds };
     },
     staleTime: 5 * 60_000,
     // Only poll while a knockout match is live.
@@ -283,6 +329,48 @@ export function useBracket() {
       return evs.some(isLive) ? 60_000 : false;
     },
   });
+}
+
+// ESPN fallback for the bracket — the original two-calendar-year fetch/dedupe/
+// prettify/sort path, kept as a safety net if the backend is unreachable.
+async function fetchEspnBracket(slug: string, season: number): Promise<{ rounds: BracketRound[] }> {
+  // ESPN's `dates=YYYY` returns a CALENDAR year, not a season — and a season
+  // spans two calendar years (e.g. a 2025-26 cup plays its group/league phase
+  // in 2025 and its knockouts in 2026). So we pull both calendar years and keep
+  // only events whose `season.year` matches this competition's current season.
+  // (A single wide date range would trip ESPN's ~1-year limit → 400.)
+  const yr = season;
+  const [curYear, nextYear] = await Promise.all([
+    espnFetch(`${siteBase(slug)}/scoreboard?dates=${yr}&limit=1000`),
+    espnFetch(`${siteBase(slug)}/scoreboard?dates=${yr + 1}&limit=1000`).catch(() => ({ events: [] })),
+  ]);
+  const byId = new Map<string, EspnEvent>();
+  for (const ev of [...(curYear.events ?? []), ...(nextYear.events ?? [])] as EspnEvent[]) {
+    // Filter to the current season and dedupe (an event can appear in both
+    // calendar-year queries near a year boundary).
+    if (ev.season?.year === yr) byId.set(ev.id, ev);
+  }
+  const events: EspnEvent[] = [...byId.values()];
+
+  const bySlug: Record<string, EspnEvent[]> = {};
+  for (const ev of events) {
+    const roundSlug = ev.season?.slug ?? '';
+    if (!roundSlug || NON_KNOCKOUT_SLUGS.has(roundSlug)) continue;
+    (bySlug[roundSlug] ??= []).push(ev);
+  }
+
+  // Order rounds chronologically by their earliest fixture (knockout rounds
+  // happen in sequence), so this works for any competition's round naming.
+  const rounds: BracketRound[] = Object.entries(bySlug)
+    .map(([roundSlug, evs]) => ({
+      name: prettifyRound(roundSlug),
+      events: evs.sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime()),
+      _min: Math.min(...evs.map((e) => new Date(e.date).getTime())),
+    }))
+    .sort((a, b) => a._min - b._min)
+    .map(({ name, events }) => ({ name, events }));
+
+  return { rounds };
 }
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────

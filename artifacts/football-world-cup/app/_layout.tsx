@@ -66,14 +66,17 @@ function RootLayoutNav() {
       }}
     >
       <Stack.Screen name="(tabs)" options={{ headerShown: false, animation: 'none' }} />
+      {/* Match & team detail open as sheets/overlays too — a consistent
+          drag-to-dismiss modal for match/player/team everywhere in the app. */}
       <Stack.Screen
         name="match/[id]"
         options={{
           headerShown: false,
-          presentation: 'card',
-          animation: 'slide_from_right',
-          animationDuration: 260,
+          presentation: 'formSheet',
           gestureEnabled: true,
+          sheetGrabberVisible: true,
+          sheetAllowedDetents: [0.94],
+          sheetCornerRadius: 22,
           contentStyle: { backgroundColor: colors.background },
         }}
       />
@@ -81,10 +84,11 @@ function RootLayoutNav() {
         name="team/[id]"
         options={{
           headerShown: false,
-          presentation: 'card',
-          animation: 'slide_from_right',
-          animationDuration: 260,
+          presentation: 'formSheet',
           gestureEnabled: true,
+          sheetGrabberVisible: true,
+          sheetAllowedDetents: [0.94],
+          sheetCornerRadius: 22,
           contentStyle: { backgroundColor: colors.background },
         }}
       />
