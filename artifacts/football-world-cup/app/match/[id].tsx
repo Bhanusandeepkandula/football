@@ -12,7 +12,7 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import { LinearGradient } from 'expo-linear-gradient';
-import { useLocalSearchParams, router } from 'expo-router';
+import { useLocalSearchParams, router, useSegments } from 'expo-router';
 import Animated, {
   useAnimatedScrollHandler,
   useSharedValue,
@@ -203,9 +203,15 @@ export default function MatchDetailScreen() {
     `${data?.displayClock ?? ''}|${data?.period ?? ''}|${data?.status ?? ''}`,
   );
 
-  // Presented as a sheet — inside a sheet the top safe-area inset is ~0, so floor
-  // it a little to clear the OS grabber and give the header room to breathe.
-  const topPad = Platform.OS === 'web' ? Math.max(insets.top, 67) : Math.max(insets.top, 16);
+  // This screen is reused for the full-page match/[id] route AND the
+  // match-sheet/[id] formSheet. In a sheet there's no status bar to clear (the
+  // OS grabber sits up top), and the safe-area top inset can leak the full-screen
+  // value — so use a small fixed top pad in the sheet, real inset on the page.
+  const segments = useSegments();
+  const isSheet = segments[0] === 'match-sheet';
+  const topPad = isSheet
+    ? 8
+    : Platform.OS === 'web' ? Math.max(insets.top, 67) : insets.top;
   const { homeColor, awayColor, vizHome, vizAway } = useTeamAccentColors(data?.homeTeam, data?.awayTeam);
 
   // Mirror a live match into the iOS Dynamic Island / Live Activity (no-op unless
@@ -649,6 +655,7 @@ export default function MatchDetailScreen() {
         <>
           <Animated.ScrollView
             ref={scrollRef}
+            style={styles.root}
             onScroll={onScroll}
             scrollEventThrottle={16}
             showsVerticalScrollIndicator={false}
