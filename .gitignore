@@ -10,6 +10,20 @@ out-tsc
 
 # dependencies
 node_modules
+.pnpm-store/
+
+# secrets & local env (NEVER commit these)
+.env
+.env.*
+!.env.example
+*.p8
+*.pem
+*.key
+# backend local data (better-sqlite registry, etc.)
+services/**/data/
+*.sqlite
+*.sqlite3
+*.db
 
 # IDEs and editors
 /.idea

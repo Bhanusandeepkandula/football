@@ -1,24 +1,31 @@
 import React from 'react';
 import { View, StyleSheet, Image, Text, Dimensions } from 'react-native';
-import { Svg, Line, Circle as SvgCircle } from 'react-native-svg';
+import { Svg, Path, Circle as SvgCircle } from 'react-native-svg';
 import { Trophy } from 'lucide-react-native';
-import { BracketRound, EspnCompetitor } from '@/hooks/useWorldCup';
+import { BracketRound, EspnCompetitor, hasStarted } from '@/hooks/useWorldCup';
+import { useColors } from '@/hooks/useColors';
+import { font, KICKER_SPACING } from '@/constants/typography';
 
 const SCREEN_W = Dimensions.get('window').width;
-const SIZE = Math.min(SCREEN_W - 24, 420);
+const SIZE = Math.min(SCREEN_W - 28, 390);
 const CX = SIZE / 2;
 const CY = SIZE / 2;
-const MAX_R = SIZE * 0.47;
+const MAX_R = SIZE * 0.43;
 
-/** Radius fractions for each round, outermost first */
-const LEVEL_R = [0.92, 0.70, 0.51, 0.33, 0.17];
-const LEVEL_LOGO = [28, 23, 19, 16, 14];
+const TEAM_R = MAX_R * 0.96;
+const ROUND_R = [MAX_R * 0.78, MAX_R * 0.58, MAX_R * 0.39, MAX_R * 0.23];
+const FLAG_SIZE = 32;
+const INNER_FLAG = 24;
+const FINAL_HUB = 82;
 
-/** Midpoint bracket connector radius (between this level and inner level) */
-function bracketR(levelIdx: number): number {
-  const outer = LEVEL_R[levelIdx] * MAX_R;
-  const inner = levelIdx + 1 < LEVEL_R.length ? LEVEL_R[levelIdx + 1] * MAX_R : outer * 0.6;
-  return (outer + inner) / 2;
+interface MatchNode {
+  id: string;
+  angleDeg: number;
+  levelIdx: number;
+  matchIdx: number;
+  roundName: string;
+  home?: EspnCompetitor;
+  away?: EspnCompetitor;
 }
 
 function polarToXY(angleDeg: number, r: number): { x: number; y: number } {
@@ -26,137 +33,259 @@ function polarToXY(angleDeg: number, r: number): { x: number; y: number } {
   return { x: CX + r * Math.cos(rad), y: CY + r * Math.sin(rad) };
 }
 
-interface TeamSlot {
-  logo: string;
-  abbr: string;
-  angleDeg: number;
-  levelIdx: number;
-  matchIdx: number;
-  side: 'home' | 'away';
+function getCompetitors(event: BracketRound['events'][number]) {
+  const competitors = event.competitions?.[0]?.competitors ?? [];
+  return {
+    home: competitors.find((c: EspnCompetitor) => c.homeAway === 'home'),
+    away: competitors.find((c: EspnCompetitor) => c.homeAway === 'away'),
+  };
 }
 
-interface BracketLine {
-  x1: number; y1: number;
-  x2: number; y2: number;
+function roundLabel(name: string): string {
+  return name
+    .replace('Round of ', 'R')
+    .replace('Quarterfinals', 'QF')
+    .replace('Semifinals', 'SF');
+}
+
+function isPlaceholderCompetitor(competitor?: EspnCompetitor): boolean {
+  if (!competitor?.team) return true;
+  const abbreviation = competitor.team.abbreviation?.trim().toUpperCase() ?? '';
+  const name = competitor.team.displayName?.trim().toLowerCase() ?? '';
+  return (
+    ['TBD', 'R32', 'R16', 'QF', 'SF', 'QW'].includes(abbreviation) ||
+    name.includes('winner') ||
+    name.includes('semifinal') ||
+    name.includes('quarterfinal') ||
+    name.includes('round of')
+  );
+}
+
+function realCompetitors(home?: EspnCompetitor, away?: EspnCompetitor): EspnCompetitor[] {
+  return [home, away].filter((competitor): competitor is EspnCompetitor => !isPlaceholderCompetitor(competitor));
+}
+
+function winnerFrom(home?: EspnCompetitor, away?: EspnCompetitor): EspnCompetitor | undefined {
+  const winner = [home, away].find((competitor) => competitor?.winner);
+  return isPlaceholderCompetitor(winner) ? undefined : winner;
+}
+
+function displayCompetitor(home?: EspnCompetitor, away?: EspnCompetitor): EspnCompetitor | undefined {
+  return winnerFrom(home, away) ?? realCompetitors(home, away)[0];
+}
+
+function scoreline(home?: EspnCompetitor, away?: EspnCompetitor, showScore = true): string {
+  if (isPlaceholderCompetitor(home) || isPlaceholderCompetitor(away)) return '';
+  if (!showScore) return 'vs';
+  const homeScore = home?.score ?? '';
+  const awayScore = away?.score ?? '';
+  return homeScore !== '' && awayScore !== '' ? `${homeScore} - ${awayScore}` : 'vs';
+}
+
+function TeamFlag({
+  competitor,
+  x,
+  y,
+  size,
+  active,
+  muted,
+}: {
+  competitor?: EspnCompetitor;
+  x: number;
+  y: number;
+  size: number;
+  active?: boolean;
+  muted?: boolean;
+}) {
+  const logo = competitor?.team?.logo;
+  const abbr = competitor?.team?.abbreviation?.slice(0, 2) ?? '';
+
+  return (
+    <View
+      style={[
+        styles.flagNode,
+        {
+          left: x - size / 2,
+          top: y - size / 2,
+          width: size,
+          height: size,
+          borderRadius: size / 2,
+          opacity: muted ? 0.42 : 1,
+          transform: [{ scale: active ? 1.08 : 1 }],
+        },
+      ]}
+    >
+      {logo ? (
+        <Image source={{ uri: logo }} style={{ width: size, height: size, borderRadius: size / 2 }} resizeMode="cover" />
+      ) : (
+        <Text style={styles.flagText}>{abbr || '•'}</Text>
+      )}
+    </View>
+  );
+}
+
+function RoundDot({ node }: { node: MatchNode }) {
+  const r = ROUND_R[node.levelIdx] ?? ROUND_R[ROUND_R.length - 1];
+  const pos = polarToXY(node.angleDeg, r);
+  const winner = winnerFrom(node.home, node.away);
+  const competitor = displayCompetitor(node.home, node.away);
+  const hasTeam = !isPlaceholderCompetitor(competitor);
+
+  if (hasTeam) {
+    return <TeamFlag competitor={competitor} x={pos.x} y={pos.y} size={INNER_FLAG} active={Boolean(winner)} />;
+  }
+
+  return (
+    <View
+      style={[
+        styles.roundDot,
+        {
+          left: pos.x - INNER_FLAG / 2,
+          top: pos.y - INNER_FLAG / 2,
+          width: INNER_FLAG,
+          height: INNER_FLAG,
+          borderRadius: INNER_FLAG / 2,
+        },
+      ]}
+    >
+      <Text style={styles.dotText}>{roundLabel(node.roundName)}</Text>
+    </View>
+  );
 }
 
 export function CircularBracket({ rounds }: { rounds: BracketRound[] }) {
-  const slots: TeamSlot[] = [];
-  const lines: BracketLine[] = [];
+  const colors = useColors();
+  const knockoutRounds = rounds.filter((round) => round.name !== '3rd Place');
+  const finalRound = knockoutRounds.find((round) => round.name === 'Final');
+  const ringRounds = knockoutRounds.filter((round) => round.name !== 'Final').slice(0, ROUND_R.length);
+  const finalMatch = finalRound?.events?.[0];
+  const finalTeams: { home?: EspnCompetitor; away?: EspnCompetitor } = finalMatch ? getCompetitors(finalMatch) : {};
+  const finalHasTeams = realCompetitors(finalTeams.home, finalTeams.away).length === 2;
+  const finalScore = finalHasTeams ? scoreline(finalTeams.home, finalTeams.away, finalMatch ? hasStarted(finalMatch) : false) : '';
 
-  rounds.forEach((round, levelIdx) => {
-    if (levelIdx >= LEVEL_R.length) return;
-    const totalTeams = round.events.length * 2;
-    const degreesPerSlot = 360 / Math.max(totalTeams, 2);
-    const r = LEVEL_R[levelIdx] * MAX_R;
-    const bR = bracketR(levelIdx);
+  const nodesByLevel: MatchNode[][] = ringRounds.map((round, levelIdx) => {
+    const degreesPerMatch = 360 / Math.max(round.events.length, 1);
+    return round.events.map((event, matchIdx) => {
+      const { home, away } = getCompetitors(event);
+      return {
+        id: event.id,
+        angleDeg: (matchIdx + 0.5) * degreesPerMatch,
+        levelIdx,
+        matchIdx,
+        roundName: round.name,
+        home,
+        away,
+      };
+    });
+  });
 
-    round.events.forEach((ev, matchIdx) => {
-      const comp = ev.competitions?.[0];
-      const competitors = comp?.competitors ?? [];
-      const home = competitors.find((c: EspnCompetitor) => c.homeAway === 'home');
-      const away = competitors.find((c: EspnCompetitor) => c.homeAway === 'away');
+  const outerNodes = nodesByLevel[0] ?? [];
+  const branchPaths: string[] = [];
+  const goldPaths: string[] = [];
 
-      // slot indices for this match: home = matchIdx*2, away = matchIdx*2+1
-      const homeSlot = matchIdx * 2;
-      const awaySlot = matchIdx * 2 + 1;
-      const homeAngle = homeSlot * degreesPerSlot;
-      const awayAngle = awaySlot * degreesPerSlot;
-      const midAngle = (homeAngle + awayAngle) / 2;
+  nodesByLevel.forEach((levelNodes, levelIdx) => {
+    const nextLevel = nodesByLevel[levelIdx + 1];
+    levelNodes.forEach((node, childIdx) => {
+      const start = polarToXY(node.angleDeg, ROUND_R[levelIdx]);
+      const parent = nextLevel?.[Math.floor(childIdx / 2)];
+      const end = parent
+        ? polarToXY(parent.angleDeg, ROUND_R[levelIdx + 1])
+        : { x: CX, y: CY };
+      const midR = parent ? (ROUND_R[levelIdx] + ROUND_R[levelIdx + 1]) / 2 : ROUND_R[levelIdx] * 0.68;
+      const control = polarToXY(parent?.angleDeg ?? node.angleDeg, midR);
+      const path = `M ${start.x} ${start.y} Q ${control.x} ${control.y} ${end.x} ${end.y}`;
+      branchPaths.push(path);
+      if (winnerFrom(node.home, node.away)) goldPaths.push(path);
 
-      // Team slots
-      if (home) slots.push({ logo: home.team.logo, abbr: home.team.abbreviation, angleDeg: homeAngle, levelIdx, matchIdx, side: 'home' });
-      if (away) slots.push({ logo: away.team.logo, abbr: away.team.abbreviation, angleDeg: awayAngle, levelIdx, matchIdx, side: 'away' });
-
-      // Bracket connector lines
-      const homePos = polarToXY(homeAngle, r);
-      const awayPos = polarToXY(awayAngle, r);
-      const midPos = polarToXY(midAngle, bR);
-
-      lines.push({ x1: homePos.x, y1: homePos.y, x2: midPos.x, y2: midPos.y });
-      lines.push({ x1: awayPos.x, y1: awayPos.y, x2: midPos.x, y2: midPos.y });
-
-      // Line from midpoint toward inner ring (only if not deepest round)
-      if (levelIdx + 1 < LEVEL_R.length && levelIdx + 1 < rounds.length) {
-        const innerR = LEVEL_R[levelIdx + 1] * MAX_R;
-        const innerPos = polarToXY(midAngle, innerR);
-        lines.push({ x1: midPos.x, y1: midPos.y, x2: innerPos.x, y2: innerPos.y });
+      if (levelIdx === 0) {
+        const spread = 360 / Math.max(levelNodes.length, 1) * 0.28;
+        const homePoint = polarToXY(node.angleDeg - spread, TEAM_R);
+        const awayPoint = polarToXY(node.angleDeg + spread, TEAM_R);
+        branchPaths.push(`M ${homePoint.x} ${homePoint.y} L ${start.x} ${start.y} L ${awayPoint.x} ${awayPoint.y}`);
       }
     });
   });
 
   return (
-    <View style={[styles.container, { width: SIZE, height: SIZE }]}>
-      {/* SVG layer: rings + connector lines */}
+    <View style={[styles.container, { width: SIZE, height: SIZE, backgroundColor: colors.card, borderColor: colors.hairline }]}>
       <Svg width={SIZE} height={SIZE} style={StyleSheet.absoluteFill}>
-        {/* Soft glow behind trophy */}
-        <SvgCircle cx={CX} cy={CY} r={MAX_R * 0.22} fill="rgba(245,166,35,0.12)" />
-        <SvgCircle cx={CX} cy={CY} r={MAX_R * 0.13} fill="rgba(245,166,35,0.18)" />
+        <SvgCircle cx={CX} cy={CY} r={MAX_R * 0.74} fill="none" stroke="rgba(255,255,255,0.045)" strokeWidth={1} strokeDasharray="2 10" />
+        <SvgCircle cx={CX} cy={CY} r={MAX_R * 0.55} fill="none" stroke="rgba(255,255,255,0.055)" strokeWidth={1} strokeDasharray="2 10" />
+        <SvgCircle cx={CX} cy={CY} r={MAX_R * 0.36} fill="none" stroke="rgba(245,166,35,0.10)" strokeWidth={1} />
+        <SvgCircle cx={CX} cy={CY} r={MAX_R * 0.19} fill="rgba(245,166,35,0.09)" />
 
-        {/* Concentric ring guides */}
-        {LEVEL_R.map((r, i) => (
-          <SvgCircle
-            key={`ring-${i}`}
-            cx={CX} cy={CY}
-            r={r * MAX_R}
+        {branchPaths.map((path, i) => (
+          <Path
+            key={`branch-${i}`}
+            d={path}
             fill="none"
-            stroke="rgba(255,255,255,0.07)"
+            stroke="rgba(255,255,255,0.14)"
             strokeWidth={1}
-            strokeDasharray="3 5"
+            strokeLinecap="round"
           />
         ))}
 
-        {/* Bracket connector lines */}
-        {lines.map((l, i) => (
-          <Line
-            key={`line-${i}`}
-            x1={l.x1} y1={l.y1}
-            x2={l.x2} y2={l.y2}
-            stroke="rgba(245,166,35,0.35)"
-            strokeWidth={1.2}
+        {goldPaths.map((path, i) => (
+          <Path
+            key={`gold-${i}`}
+            d={path}
+            fill="none"
+            stroke="rgba(245,166,35,0.42)"
+            strokeWidth={1.1}
+            strokeLinecap="round"
           />
         ))}
       </Svg>
 
-      {/* Team logo badges */}
-      {slots.map((slot, i) => {
-        const r = LEVEL_R[slot.levelIdx] * MAX_R;
-        const pos = polarToXY(slot.angleDeg, r);
-        const logoSize = LEVEL_LOGO[slot.levelIdx] ?? 22;
-        const totalSize = logoSize + 4;
-
-        return (
-          <View
-            key={`slot-${i}`}
-            style={[
-              styles.badge,
-              {
-                left: pos.x - totalSize / 2,
-                top: pos.y - totalSize / 2,
-                width: totalSize,
-                height: totalSize,
-                borderRadius: totalSize / 2,
-              },
-            ]}
-          >
-            {slot.logo ? (
-              <Image
-                source={{ uri: slot.logo }}
-                style={{ width: logoSize, height: logoSize, borderRadius: logoSize / 2 }}
-                resizeMode="contain"
-              />
-            ) : (
-              <View style={[styles.badgePlaceholder, { width: logoSize, height: logoSize, borderRadius: logoSize / 2 }]}>
-                <Text style={styles.badgeText}>{slot.abbr?.slice(0, 2) ?? '?'}</Text>
-              </View>
-            )}
+      <View style={styles.roundRail} pointerEvents="none">
+        {ringRounds.map((round, i) => (
+          <View key={round.name} style={[styles.roundChip, { backgroundColor: i === 0 ? colors.primary + '22' : colors.secondary }]}>
+            <Text style={[styles.roundText, { color: i === 0 ? colors.primary : colors.mutedForeground }]}>
+              {roundLabel(round.name)}
+            </Text>
           </View>
-        );
+        ))}
+      </View>
+
+      {outerNodes.flatMap((node) => {
+        const spread = 360 / Math.max(outerNodes.length, 1) * 0.28;
+        const homePoint = polarToXY(node.angleDeg - spread, TEAM_R);
+        const awayPoint = polarToXY(node.angleDeg + spread, TEAM_R);
+        const winner = winnerFrom(node.home, node.away);
+        return [
+          <TeamFlag
+            key={`${node.id}-home`}
+            competitor={node.home}
+            x={homePoint.x}
+            y={homePoint.y}
+            size={FLAG_SIZE}
+            active={winner?.team.id === node.home?.team.id}
+            muted={Boolean(winner && winner.team.id !== node.home?.team.id)}
+          />,
+          <TeamFlag
+            key={`${node.id}-away`}
+            competitor={node.away}
+            x={awayPoint.x}
+            y={awayPoint.y}
+            size={FLAG_SIZE}
+            active={winner?.team.id === node.away?.team.id}
+            muted={Boolean(winner && winner.team.id !== node.away?.team.id)}
+          />,
+        ];
       })}
 
-      {/* Trophy at center */}
-      <View style={[styles.trophy, { left: CX - 28, top: CY - 28, width: 56, height: 56 }]}>
-        <Trophy size={26} color="#F5A623" fill="#F5A623" />
+      {nodesByLevel.slice(1).flat().map((node) => (
+        <RoundDot key={`${node.id}-${node.levelIdx}-${node.matchIdx}`} node={node} />
+      ))}
+
+      <View style={[styles.finalHub, { left: CX - FINAL_HUB / 2, top: CY - FINAL_HUB / 2, borderColor: colors.primary + '55', backgroundColor: colors.background }]}>
+        <Text style={[styles.finalLabel, { color: colors.primary }]}>FINAL</Text>
+        <View style={[styles.trophy, { backgroundColor: colors.secondary, borderColor: colors.primary + '55' }]}>
+          <Trophy size={27} color={colors.primary} fill={colors.primary} />
+        </View>
+        <Text style={[styles.finalScore, { color: colors.foreground }]} numberOfLines={2}>
+          {finalScore || 'Final'}
+        </Text>
       </View>
     </View>
   );
@@ -165,37 +294,82 @@ export function CircularBracket({ rounds }: { rounds: BracketRound[] }) {
 const styles = StyleSheet.create({
   container: {
     alignSelf: 'center',
-    backgroundColor: '#0A0E1A',
-    borderRadius: 16,
+    borderRadius: 25,
+    borderWidth: StyleSheet.hairlineWidth,
     overflow: 'hidden',
     position: 'relative',
   },
-  badge: {
+  roundRail: {
     position: 'absolute',
-    backgroundColor: '#141828',
-    borderWidth: 1.5,
-    borderColor: 'rgba(245,166,35,0.4)',
+    top: 14,
+    left: 14,
+    flexDirection: 'row',
+    gap: 6,
+  },
+  roundChip: {
+    borderRadius: 999,
+    paddingHorizontal: 9,
+    paddingVertical: 5,
+  },
+  roundText: {
+    fontSize: 10,
+    fontFamily: font.extrabold,
+    letterSpacing: KICKER_SPACING * 0.7,
+  },
+  flagNode: {
+    position: 'absolute',
+    backgroundColor: '#111318',
     alignItems: 'center',
     justifyContent: 'center',
     overflow: 'hidden',
+    // White ring so each cover-cropped flag reads as a clean circular badge.
+    borderWidth: 1.5,
+    borderColor: 'rgba(255,255,255,0.92)',
   },
-  badgePlaceholder: {
-    backgroundColor: '#1E2D45',
+  flagText: {
+    color: '#E8E8ED',
+    fontSize: 8,
+    fontFamily: font.extrabold,
+  },
+  roundDot: {
+    position: 'absolute',
+    backgroundColor: 'rgba(18,18,22,0.92)',
     alignItems: 'center',
     justifyContent: 'center',
   },
-  badgeText: {
-    color: '#8899AA',
+  dotText: {
+    color: '#8E8E93',
     fontSize: 7,
-    fontFamily: 'Nunito_700Bold',
+    fontFamily: font.extrabold,
+  },
+  finalHub: {
+    position: 'absolute',
+    width: FINAL_HUB,
+    height: FINAL_HUB,
+    borderRadius: FINAL_HUB / 2,
+    borderWidth: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 4,
+  },
+  finalLabel: {
+    fontSize: 9,
+    fontFamily: font.extrabold,
+    letterSpacing: KICKER_SPACING,
   },
   trophy: {
-    position: 'absolute',
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+    borderWidth: StyleSheet.hairlineWidth,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: '#0A0E1A',
-    borderRadius: 28,
-    borderWidth: 2,
-    borderColor: 'rgba(245,166,35,0.5)',
+  },
+  finalScore: {
+    fontSize: 11,
+    lineHeight: 14,
+    fontFamily: font.extrabold,
+    textAlign: 'center',
+    paddingHorizontal: 8,
   },
 });

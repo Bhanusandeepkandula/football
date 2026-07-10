@@ -1,50 +1,102 @@
-import React, { useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   View,
   Text,
   StyleSheet,
-  FlatList,
-  ActivityIndicator,
   TouchableOpacity,
   RefreshControl,
   ScrollView,
+  FlatList,
   Platform,
 } from 'react-native';
 import Animated, { FadeIn } from 'react-native-reanimated';
+import { Gesture, GestureDetector, Directions } from 'react-native-gesture-handler';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { LayoutList, Circle, Trophy } from 'lucide-react-native';
+import { Network, Circle, Trophy, LayoutGrid } from 'lucide-react-native';
+import { makeSlideIn } from '@/lib/transitions';
 import { useColors } from '@/hooks/useColors';
-import { useBracket, BracketRound } from '@/hooks/useWorldCup';
-import { MatchCard } from '@/components/MatchCard';
+import { useLeague } from '@/hooks/useLeague';
+import { LeagueSwitcher } from '@/components/LeagueSwitcher';
+import { hasBracket as leagueHasBracket, hasGroups as leagueHasGroups } from '@/config/leagues';
+import { useBracket, useStandings, BracketRound, EspnGroup } from '@/hooks/useWorldCup';
 import { CircularBracket } from '@/components/CircularBracket';
+import { BracketTree } from '@/components/BracketTree';
+import { GroupTable } from '@/components/GroupTable';
+import { Skeleton, SkeletonBox } from '@/components/Skeleton';
 
 type ViewMode = 'list' | 'circular';
+type Section = 'bracket' | 'groups';
 
 export default function BracketScreen() {
   const colors = useColors();
   const insets = useSafeAreaInsets();
+  const { league } = useLeague();
+
+  // Which sections make sense for this competition: cups have a knockout
+  // bracket; leagues/tournaments have a standings table. A pure knockout cup has
+  // only a bracket; a plain league has only a table.
+  const isLeagueTable = league.format === 'league' || league.format === 'friendlies';
+  const groupsLabel = isLeagueTable ? 'Table' : 'Groups';
+  const sections = useMemo<Section[]>(() => {
+    const s: Section[] = [];
+    if (leagueHasBracket(league)) s.push('bracket');
+    if (leagueHasGroups(league)) s.push('groups');
+    return s.length ? s : ['groups'];
+  }, [league]);
+
   const { data, isLoading, isError, refetch, isRefetching } = useBracket();
-  const [activeRound, setActiveRound] = useState<string | null>(null);
-  const [viewMode, setViewMode] = useState<ViewMode>('circular');
+  const { data: standings, isLoading: standingsLoading, refetch: refetchStandings, isRefetching: standingsRefetching } = useStandings();
+  const [section, setSection] = useState<Section>(sections[0]);
+  const [dir, setDir] = useState(1);
+  // Full bracket tree (round tabs + group stage + knockouts) is the default view.
+  const [viewMode, setViewMode] = useState<ViewMode>('list');
+
+  // If the competition changes and the current section no longer applies, snap
+  // to the first available one.
+  useEffect(() => {
+    setSection((cur) => (sections.includes(cur) ? cur : sections[0]));
+  }, [sections]);
+
+  // Switch section with a directional slide; also swipeable left/right.
+  const changeSection = useCallback((next: Section) => {
+    setSection((cur) => {
+      if (next === cur) return cur;
+      setDir(sections.indexOf(next) > sections.indexOf(cur) ? 1 : -1);
+      return next;
+    });
+  }, [sections]);
+
+  const swipe = useMemo(() => {
+    const goNext = Gesture.Fling().direction(Directions.LEFT).onEnd(() => {
+      const i = sections.indexOf(section);
+      if (i < sections.length - 1) changeSection(sections[i + 1]);
+    }).runOnJS(true);
+    const goPrev = Gesture.Fling().direction(Directions.RIGHT).onEnd(() => {
+      const i = sections.indexOf(section);
+      if (i > 0) changeSection(sections[i - 1]);
+    }).runOnJS(true);
+    return Gesture.Race(goNext, goPrev);
+  }, [section, sections, changeSection]);
 
   const topPad = Platform.OS === 'web' ? Math.max(insets.top, 67) : insets.top;
   const rounds: BracketRound[] = data?.rounds ?? [];
-  const selectedRound = activeRound ?? rounds[0]?.name ?? null;
-  const events = rounds.find(r => r.name === selectedRound)?.events ?? [];
+  const groups: EspnGroup[] = standings?.children ?? [];
+
+  const showBracket = section === 'bracket';
 
   return (
     <View style={[styles.container, { backgroundColor: colors.background }]}>
       {/* Header */}
       <View style={[styles.header, { paddingTop: topPad + 12 }]}>
-        <View>
-          <Text style={[styles.title, { color: colors.foreground }]}>Bracket</Text>
-          <Text style={[styles.subtitle, { color: colors.mutedForeground }]}>
-            FIFA World Cup 2026
+        <View style={{ flex: 1 }}>
+          <LeagueSwitcher />
+          <Text style={[styles.title, { color: colors.foreground }]}>
+            {showBracket ? 'Bracket' : isLeagueTable ? 'Table' : 'Group Stage'}
           </Text>
         </View>
 
-        {/* View mode toggle */}
-        {rounds.length > 0 && (
+        {/* View mode toggle (bracket only) */}
+        {showBracket && rounds.length > 0 && (
           <View style={[styles.toggleGroup, { backgroundColor: colors.secondary, borderColor: colors.border }]}>
             <TouchableOpacity
               onPress={() => setViewMode('circular')}
@@ -56,17 +108,86 @@ export default function BracketScreen() {
               onPress={() => setViewMode('list')}
               style={[styles.toggleBtn, viewMode === 'list' && { backgroundColor: colors.primary }]}
             >
-              <LayoutList size={16} color={viewMode === 'list' ? colors.primaryForeground : colors.mutedForeground} />
+              <Network size={16} color={viewMode === 'list' ? colors.primaryForeground : colors.mutedForeground} />
             </TouchableOpacity>
           </View>
         )}
       </View>
 
-      {isLoading ? (
-        <View style={styles.centered}>
-          <ActivityIndicator color={colors.primary} size="large" />
-          <Text style={[styles.loadingText, { color: colors.mutedForeground }]}>Loading bracket…</Text>
+      {/* Section switcher: Bracket | Table/Groups — only when both apply. */}
+      {sections.length > 1 && (
+        <View style={styles.sectionRow}>
+          <View style={[styles.sectionTrack, { backgroundColor: colors.secondary }]}>
+            {sections.map((id) => {
+              const meta = id === 'bracket'
+                ? { label: 'Bracket', Icon: Trophy }
+                : { label: groupsLabel, Icon: LayoutGrid };
+              const on = id === section;
+              return (
+                <TouchableOpacity
+                  key={id}
+                  activeOpacity={0.85}
+                  accessibilityRole="button"
+                  accessibilityState={{ selected: on }}
+                  onPress={() => changeSection(id)}
+                  style={[styles.sectionBtn, on && { backgroundColor: colors.primary }]}
+                >
+                  <meta.Icon size={15} color={on ? colors.primaryForeground : colors.mutedForeground} strokeWidth={2.4} />
+                  <Text style={[styles.sectionBtnText, { color: on ? colors.primaryForeground : colors.mutedForeground }]}>
+                    {meta.label}
+                  </Text>
+                </TouchableOpacity>
+              );
+            })}
+          </View>
         </View>
+      )}
+
+      {/* Swipeable section content (Bracket ⇄ Groups) with a directional slide. */}
+      <GestureDetector gesture={swipe}>
+        <Animated.View key={section} entering={makeSlideIn(dir)} style={{ flex: 1 }}>
+      {/* ── GROUPS ─────────────────────────────────────────────── */}
+      {section === 'groups' ? (
+        standingsLoading ? (
+          <Skeleton style={{ paddingTop: 4 }}>
+            {[0, 1, 2, 3].map((g) => (
+              <View key={g} style={{ marginHorizontal: 16, marginVertical: 8, borderRadius: 12, overflow: 'hidden' }}>
+                <SkeletonBox style={{ height: 42, borderRadius: 0 }} />
+                {[0, 1, 2, 3].map((r) => (
+                  <SkeletonBox key={r} style={{ height: 40, marginTop: StyleSheet.hairlineWidth, borderRadius: 0 }} />
+                ))}
+              </View>
+            ))}
+          </Skeleton>
+        ) : groups.length === 0 ? (
+          <View style={styles.centered}>
+            <LayoutGrid size={44} color={colors.mutedForeground} strokeWidth={1.6} />
+            <Text style={[styles.emptyText, { color: colors.mutedForeground }]}>
+              {isLeagueTable ? 'Standings not available yet' : 'Group standings not available yet'}
+            </Text>
+          </View>
+        ) : (
+          <Animated.View entering={FadeIn.duration(300)} style={{ flex: 1 }}>
+            <FlatList
+              data={groups}
+              keyExtractor={(item, idx) => item.abbreviation ?? item.name ?? String(idx)}
+              renderItem={({ item }) => <GroupTable group={item} />}
+              contentContainerStyle={{ paddingTop: 4, paddingBottom: insets.bottom + 90 }}
+              refreshControl={
+                <RefreshControl refreshing={standingsRefetching} onRefresh={refetchStandings} tintColor={colors.primary} colors={[colors.primary]} />
+              }
+              showsVerticalScrollIndicator={false}
+              ItemSeparatorComponent={() => <View style={{ height: 4 }} />}
+            />
+          </Animated.View>
+        )
+      ) : /* ── BRACKET ─────────────────────────────────────────── */
+      isLoading ? (
+        <Skeleton style={{ paddingHorizontal: 16, paddingTop: 8, gap: 12 }}>
+          <SkeletonBox style={{ height: 56, borderRadius: 14 }} />
+          <SkeletonBox style={{ height: 320, borderRadius: 20 }} />
+          <SkeletonBox style={{ height: 120, borderRadius: 14 }} />
+        </Skeleton>
       ) : isError ? (
         <View style={styles.centered}>
           <Text style={[styles.emptyText, { color: colors.mutedForeground }]}>Could not load bracket</Text>
@@ -106,56 +227,16 @@ export default function BracketScreen() {
           </Animated.View>
         </ScrollView>
       ) : (
-        // ── List view ──────────────────────────────────────────────────────
-        <>
-          {/* Round pills */}
-          <View>
-            <FlatList
-              data={rounds}
-              keyExtractor={r => r.name}
-              horizontal
-              showsHorizontalScrollIndicator={false}
-              contentContainerStyle={styles.roundPills}
-              renderItem={({ item }) => {
-                const isActive = item.name === selectedRound;
-                return (
-                  <TouchableOpacity
-                    onPress={() => setActiveRound(item.name)}
-                    style={[
-                      styles.roundPill,
-                      {
-                        backgroundColor: isActive ? colors.primary : colors.secondary,
-                        borderColor: isActive ? colors.primary : colors.border,
-                      },
-                    ]}
-                  >
-                    <Text style={[styles.roundPillText, { color: isActive ? colors.primaryForeground : colors.mutedForeground }]}>
-                      {item.name}
-                    </Text>
-                    <Text style={[styles.roundCount, { color: isActive ? colors.primaryForeground : colors.mutedForeground }]}>
-                      {item.events.length}
-                    </Text>
-                  </TouchableOpacity>
-                );
-              }}
-            />
-          </View>
-
-          <FlatList
-            data={events}
-            keyExtractor={e => e.id}
-            renderItem={({ item, index }) => <MatchCard event={item} index={index} />}
-            contentContainerStyle={{ paddingTop: 8, paddingBottom: insets.bottom + 90 }}
-            refreshControl={<RefreshControl refreshing={isRefetching} onRefresh={refetch} tintColor={colors.primary} />}
-            showsVerticalScrollIndicator={false}
-            ListEmptyComponent={
-              <View style={styles.centered}>
-                <Text style={[styles.emptyText, { color: colors.mutedForeground }]}>No matches in this round yet</Text>
-              </View>
-            }
-          />
-        </>
+        // ── Bracket-tree view (Apple Sports style, free pan) ────────────────
+        <Animated.View
+          entering={FadeIn.duration(400)}
+          style={{ flex: 1, paddingHorizontal: 12, paddingTop: 4, paddingBottom: insets.bottom + 90 }}
+        >
+          <BracketTree rounds={rounds} groups={groups} />
+        </Animated.View>
       )}
+        </Animated.View>
+      </GestureDetector>
     </View>
   );
 }
@@ -167,10 +248,28 @@ const styles = StyleSheet.create({
     alignItems: 'flex-start',
     justifyContent: 'space-between',
     paddingHorizontal: 20,
-    paddingBottom: 12,
+    paddingBottom: 10,
   },
   title: { fontSize: 26, fontFamily: 'Nunito_700Bold', letterSpacing: -0.5 },
   subtitle: { fontSize: 13, fontFamily: 'Nunito_400Regular', marginTop: 2 },
+
+  sectionRow: { paddingHorizontal: 16, paddingBottom: 12 },
+  sectionTrack: {
+    flexDirection: 'row',
+    borderRadius: 12,
+    padding: 3,
+    gap: 3,
+  },
+  sectionBtn: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    paddingVertical: 9,
+    borderRadius: 9,
+  },
+  sectionBtnText: { fontSize: 14, fontFamily: 'Nunito_700Bold', letterSpacing: 0.1 },
 
   toggleGroup: {
     flexDirection: 'row',
@@ -187,27 +286,17 @@ const styles = StyleSheet.create({
     height: 36,
   },
 
-  roundPills: { paddingHorizontal: 16, paddingBottom: 12, gap: 8 },
-  roundPill: {
-    flexDirection: 'row', alignItems: 'center',
-    paddingHorizontal: 14, paddingVertical: 8,
-    borderRadius: 20, borderWidth: 1, gap: 6, marginRight: 8,
-  },
-  roundPillText: { fontSize: 13, fontFamily: 'Nunito_600SemiBold' },
-  roundCount: { fontSize: 11, fontFamily: 'Nunito_700Bold', opacity: 0.7 },
-
   centered: {
     flex: 1, alignItems: 'center', justifyContent: 'center',
     gap: 12, padding: 32,
   },
-  loadingText: { fontSize: 14, fontFamily: 'Nunito_400Regular', marginTop: 8 },
   emptyText: { fontSize: 16, fontFamily: 'Nunito_500Medium', textAlign: 'center' },
   emptySubtext: { fontSize: 13, fontFamily: 'Nunito_400Regular', textAlign: 'center' },
   retryBtn: { paddingHorizontal: 24, paddingVertical: 10, borderRadius: 20 },
   retryText: { fontSize: 14, fontFamily: 'Nunito_600SemiBold' },
 
   legendBox: {
-    borderRadius: 12, borderWidth: 1, padding: 16, gap: 10,
+    borderRadius: 11, borderWidth: 1, padding: 16, gap: 10,
   },
   legendTitle: { fontSize: 14, fontFamily: 'Nunito_700Bold', marginBottom: 4 },
   legendRow: { flexDirection: 'row', alignItems: 'center', gap: 10 },

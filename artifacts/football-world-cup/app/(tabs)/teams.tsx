@@ -4,7 +4,6 @@ import {
   Text,
   StyleSheet,
   FlatList,
-  ActivityIndicator,
   TouchableOpacity,
   RefreshControl,
   Image,
@@ -13,15 +12,22 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
+import { useQueryClient } from '@tanstack/react-query';
 import { useColors } from '@/hooks/useColors';
+import { useLeague } from '@/hooks/useLeague';
+import { LeagueSwitcher } from '@/components/LeagueSwitcher';
 import { useTeams, EspnFullTeam } from '@/hooks/useWorldCup';
+import { teamDetailQueryOptions } from '@/hooks/useTeamDetail';
+import { Skeleton, SkeletonBox } from '@/components/Skeleton';
 import { Feather } from '@expo/vector-icons';
 
 export default function TeamsScreen() {
   const colors = useColors();
+  const { league } = useLeague();
   const insets = useSafeAreaInsets();
   const { data, isLoading, isError, refetch, isRefetching } = useTeams();
   const [search, setSearch] = useState('');
+  const teamNoun = league.region === 'International' ? 'nations' : 'clubs';
 
   const topPad = Platform.OS === 'web' ? Math.max(insets.top, 67) : insets.top;
 
@@ -40,9 +46,10 @@ export default function TeamsScreen() {
     <View style={[styles.container, { backgroundColor: colors.background }]}>
       {/* Header */}
       <View style={[styles.header, { paddingTop: topPad + 12 }]}>
+        <LeagueSwitcher />
         <Text style={[styles.title, { color: colors.foreground }]}>Teams</Text>
         <Text style={[styles.subtitle, { color: colors.mutedForeground }]}>
-          {allTeams.length} qualified nations
+          {allTeams.length} {teamNoun}
         </Text>
       </View>
 
@@ -66,12 +73,14 @@ export default function TeamsScreen() {
       </View>
 
       {isLoading ? (
-        <View style={styles.centered}>
-          <ActivityIndicator color={colors.primary} size="large" />
-          <Text style={[styles.loadingText, { color: colors.mutedForeground }]}>
-            Loading teams…
-          </Text>
-        </View>
+        <Skeleton style={{ padding: 12 }}>
+          {[0, 1, 2, 3, 4].map((r) => (
+            <View key={r} style={{ flexDirection: 'row', gap: 8, marginBottom: 8 }}>
+              <SkeletonBox style={{ flex: 1, height: 130, borderRadius: 11 }} />
+              <SkeletonBox style={{ flex: 1, height: 130, borderRadius: 11 }} />
+            </View>
+          ))}
+        </Skeleton>
       ) : isError ? (
         <View style={styles.centered}>
           <Text style={[styles.emptyText, { color: colors.mutedForeground }]}>
@@ -88,7 +97,7 @@ export default function TeamsScreen() {
         <FlatList
           data={filtered}
           keyExtractor={t => t.id}
-          numColumns={2}
+          numColumns={4}
           columnWrapperStyle={styles.row}
           renderItem={({ item }) => <TeamCard team={item} colors={colors} />}
           contentContainerStyle={{ padding: 12, paddingBottom: insets.bottom + 90 }}
@@ -116,32 +125,27 @@ export default function TeamsScreen() {
 
 function TeamCard({ team, colors }: { team: EspnFullTeam; colors: ReturnType<typeof useColors> }) {
   const logo = team.logos?.[0]?.href;
-  const accent = team.color ? `#${team.color}` : colors.secondary;
+  const queryClient = useQueryClient();
 
   return (
     <TouchableOpacity
-      activeOpacity={0.7}
+      activeOpacity={0.75}
       onPress={() => router.push(`/team/${team.id}` as any)}
-      style={[
-        styles.teamCard,
-        {
-          backgroundColor: colors.card,
-          borderColor: colors.border,
-          borderRadius: 12,
-        },
-      ]}
+      onPressIn={() => queryClient.prefetchQuery(teamDetailQueryOptions(team.id))}
+      style={styles.teamCard}
     >
-      <View style={[styles.teamCardAccent, { backgroundColor: accent, opacity: 0.15, borderRadius: 12 }]} />
-      {logo ? (
-        <Image source={{ uri: logo }} style={styles.teamLogo} resizeMode="contain" />
-      ) : (
-        <View style={[styles.teamLogoPlaceholder, { backgroundColor: colors.muted }]} />
-      )}
+      {/* Soft shadow gives the circle edge definition without a border. */}
+      <View style={styles.flagShadow}>
+        <View style={[styles.flagRing, { backgroundColor: colors.card }]}>
+          {logo ? (
+            <Image source={{ uri: logo }} style={styles.flag} resizeMode="cover" />
+          ) : (
+            <View style={[styles.flag, { backgroundColor: colors.muted }]} />
+          )}
+        </View>
+      </View>
       <Text style={[styles.teamName, { color: colors.foreground }]} numberOfLines={2}>
         {team.displayName}
-      </Text>
-      <Text style={[styles.teamAbbr, { color: colors.mutedForeground }]}>
-        {team.abbreviation}
       </Text>
     </TouchableOpacity>
   );
@@ -170,7 +174,7 @@ const styles = StyleSheet.create({
     marginBottom: 8,
     paddingHorizontal: 12,
     paddingVertical: 10,
-    borderRadius: 12,
+    borderRadius: 11,
     borderWidth: 1,
     gap: 8,
   },
@@ -180,41 +184,44 @@ const styles = StyleSheet.create({
     fontFamily: 'Nunito_400Regular',
   },
   row: {
-    gap: 8,
-    marginBottom: 8,
+    gap: 6,
+    marginBottom: 14,
   },
   teamCard: {
     flex: 1,
-    padding: 14,
     alignItems: 'center',
-    borderWidth: 1,
+    gap: 7,
+    paddingVertical: 4,
+  },
+  flagShadow: {
+    borderRadius: 31,
+    ...(Platform.OS === 'web'
+      ? ({ boxShadow: '0px 2px 6px rgba(0,0,0,0.20)' } as any)
+      : {
+          shadowColor: '#000',
+          shadowOffset: { width: 0, height: 2 },
+          shadowOpacity: 0.18,
+          shadowRadius: 5,
+          elevation: 3,
+        }),
+  },
+  flagRing: {
+    width: 62,
+    height: 62,
+    borderRadius: 31,
     overflow: 'hidden',
-    minHeight: 130,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
-  teamCardAccent: {
-    ...StyleSheet.absoluteFillObject,
-  },
-  teamLogo: {
-    width: 52,
-    height: 52,
-    marginBottom: 8,
-  },
-  teamLogoPlaceholder: {
-    width: 52,
-    height: 52,
-    borderRadius: 26,
-    marginBottom: 8,
-  },
+  // ESPN flag PNGs are square with transparent padding around a 3:2 flag. Scale
+  // up enough that the flag OVER-fills the circle (padding fully cropped, no flat
+  // top/bottom edge) so it reads as a true circular flag.
+  flag: { width: '100%', height: '100%', transform: [{ scale: 1.72 }] },
   teamName: {
-    fontSize: 13,
+    fontSize: 11.5,
     fontFamily: 'Nunito_600SemiBold',
     textAlign: 'center',
-    lineHeight: 17,
-  },
-  teamAbbr: {
-    fontSize: 11,
-    fontFamily: 'Nunito_400Regular',
-    marginTop: 2,
+    lineHeight: 14,
   },
   centered: {
     flex: 1,

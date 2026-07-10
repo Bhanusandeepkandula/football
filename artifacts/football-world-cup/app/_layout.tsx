@@ -1,9 +1,19 @@
-import React, { useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
 import { View } from 'react-native';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
+import { AccentProvider } from '@/hooks/useAccent';
+import { LeagueProvider } from '@/hooks/useLeague';
+import { FavoritesProvider } from '@/hooks/useFavorites';
+import { ThemeProvider, useTheme } from '@/hooks/useTheme';
+import { useColors } from '@/hooks/useColors';
+import { MatchNavStyleProvider } from '@/hooks/useMatchNavStyle';
+import { MatchAlertsProvider } from '@/hooks/useMatchAlerts';
 import { ErrorBoundary } from '@/components/ErrorBoundary';
+import { initTelemetry, captureError } from '@/lib/telemetry';
+import { AnimatedSplash } from '@/components/AnimatedSplash';
+import { themeStatusBarStyle } from '@/constants/colors';
 import {
   Nunito_400Regular,
   Nunito_500Medium,
@@ -22,21 +32,49 @@ import {
 } from '@expo-google-fonts/oswald';
 import { Stack } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
+import { StatusBar } from 'expo-status-bar';
+import * as SystemUI from 'expo-system-ui';
 
 SplashScreen.preventAutoHideAsync().catch(() => {});
+initTelemetry();
 
-const queryClient = new QueryClient();
+const queryClient = new QueryClient({
+  defaultOptions: {
+    queries: {
+      refetchOnWindowFocus: false,
+      refetchOnReconnect: false,
+      retry: 1,
+      // Keep fetched data fresh for 30s (fast tab/back skips the network) and in
+      // cache for an hour, so returning to a screen paints instantly from cache
+      // instead of re-entering a loading spinner. Per-query refetchInterval still
+      // drives liveness for scoreboards / live match detail.
+      staleTime: 30 * 1000,
+      gcTime: 60 * 60 * 1000,
+    },
+  },
+});
 
 function RootLayoutNav() {
+  const colors = useColors();
+
   return (
-    <Stack screenOptions={{ headerShown: false }}>
-      <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
+    <Stack
+      screenOptions={{
+        headerShown: false,
+        contentStyle: { backgroundColor: colors.background },
+        animation: 'fade',
+      }}
+    >
+      <Stack.Screen name="(tabs)" options={{ headerShown: false, animation: 'none' }} />
       <Stack.Screen
         name="match/[id]"
         options={{
           headerShown: false,
           presentation: 'card',
           animation: 'slide_from_right',
+          animationDuration: 260,
+          gestureEnabled: true,
+          contentStyle: { backgroundColor: colors.background },
         }}
       />
       <Stack.Screen
@@ -45,13 +83,64 @@ function RootLayoutNav() {
           headerShown: false,
           presentation: 'card',
           animation: 'slide_from_right',
+          animationDuration: 260,
+          gestureEnabled: true,
+          contentStyle: { backgroundColor: colors.background },
+        }}
+      />
+      {/* Player detail as a native iOS sheet (grabber + drag-to-dismiss). */}
+      <Stack.Screen
+        name="player/[id]"
+        options={{
+          headerShown: false,
+          presentation: 'formSheet',
+          gestureEnabled: true,
+          sheetGrabberVisible: true,
+          // Single tall detent — opens fully so the profile is visible at once
+          // (drag down to dismiss). Avoids the awkward half-open state.
+          sheetAllowedDetents: [0.94],
+          sheetCornerRadius: 22,
+          contentStyle: { backgroundColor: colors.background },
+        }}
+      />
+      {/* Team detail as a sheet — opened from a match card's crest/name tap
+          (the full-page team route stays for the Teams tab / standings). */}
+      <Stack.Screen
+        name="team-sheet/[id]"
+        options={{
+          headerShown: false,
+          presentation: 'formSheet',
+          gestureEnabled: true,
+          sheetGrabberVisible: true,
+          sheetAllowedDetents: [0.94],
+          sheetCornerRadius: 22,
+          contentStyle: { backgroundColor: colors.background },
         }}
       />
     </Stack>
   );
 }
 
+function ThemedAppShell({ children }: { children: React.ReactNode }) {
+  const colors = useColors();
+  const { theme } = useTheme();
+
+  useEffect(() => {
+    SystemUI.setBackgroundColorAsync(colors.background).catch(() => {});
+  }, [colors.background]);
+
+  return (
+    <SafeAreaProvider style={{ backgroundColor: colors.background }}>
+      <StatusBar style={themeStatusBarStyle(theme)} translucent backgroundColor="transparent" />
+      <GestureHandlerRootView style={{ flex: 1, backgroundColor: colors.background }}>
+        {children}
+      </GestureHandlerRootView>
+    </SafeAreaProvider>
+  );
+}
+
 export default function RootLayout() {
+  const [splashDone, setSplashDone] = useState(false);
   const [fontsLoaded, fontError] = useFonts({
     Nunito_400Regular,
     Nunito_500Medium,
@@ -67,26 +156,37 @@ export default function RootLayout() {
   });
 
   useEffect(() => {
-    // Hide splash once fonts are ready (or on error – system fonts will show)
     if (fontsLoaded || fontError) {
       SplashScreen.hideAsync().catch(() => {});
     }
   }, [fontsLoaded, fontError]);
 
-  // Never return null – show dark background while fonts load so there's no white flash
   if (!fontsLoaded && !fontError) {
-    return <View style={{ flex: 1, backgroundColor: '#000' }} />;
+    return <View style={{ flex: 1, backgroundColor: '#0A0E1A' }} />;
   }
 
   return (
-    <SafeAreaProvider>
-      <ErrorBoundary>
+    <View style={{ flex: 1, backgroundColor: '#0A0E1A' }}>
+      <ErrorBoundary onError={(error, stack) => captureError(error, { componentStack: stack })}>
         <QueryClientProvider client={queryClient}>
-          <GestureHandlerRootView style={{ flex: 1 }}>
-            <RootLayoutNav />
-          </GestureHandlerRootView>
+          <ThemeProvider>
+            <AccentProvider>
+              <LeagueProvider>
+                <FavoritesProvider>
+                  <MatchNavStyleProvider>
+                    <MatchAlertsProvider>
+                      <ThemedAppShell>
+                        <RootLayoutNav />
+                      </ThemedAppShell>
+                    </MatchAlertsProvider>
+                  </MatchNavStyleProvider>
+                </FavoritesProvider>
+              </LeagueProvider>
+            </AccentProvider>
+          </ThemeProvider>
         </QueryClientProvider>
       </ErrorBoundary>
-    </SafeAreaProvider>
+      {!splashDone ? <AnimatedSplash onFinish={() => setSplashDone(true)} /> : null}
+    </View>
   );
 }

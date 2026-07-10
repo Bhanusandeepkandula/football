@@ -1,81 +1,32 @@
 import React from 'react';
-import { Platform } from 'react-native';
-import { Tabs } from 'expo-router';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { CalendarDays, Trophy, LayoutGrid, Shield } from 'lucide-react-native';
-import { useColors } from '@/hooks/useColors';
+import { NativeTabs, Icon, Label, VectorIcon } from 'expo-router/unstable-native-tabs';
+import MaterialCommunityIcons from '@expo/vector-icons/MaterialCommunityIcons';
+import { useAccent } from '@/hooks/useAccent';
 
+// Apple-native tab bar (real iOS 26 Liquid Glass). Built on expo-router's
+// native tabs, which wrap UITabBarController via react-native-screens — so the
+// glass, blur, and minimize-on-scroll are rendered by the OS, not faked in JS.
 export default function TabLayout() {
-  const colors = useColors();
-  const insets = useSafeAreaInsets();
-
-  const tabBarHeight = Platform.OS === 'ios' ? 60 + insets.bottom : 60;
+  const { accent } = useAccent();
 
   return (
-    <Tabs
-      screenOptions={{
-        headerShown: false,
-        tabBarStyle: {
-          backgroundColor: colors.card,
-          borderTopWidth: 0,
-          height: tabBarHeight,
-          paddingBottom: Platform.OS === 'ios' ? insets.bottom : 8,
-          paddingTop: 8,
-          ...(Platform.OS === 'web'
-            ? { boxShadow: '0px -4px 16px rgba(0,0,0,0.30)' } as any
-            : {
-                shadowColor: '#000',
-                shadowOffset: { width: 0, height: -4 },
-                shadowOpacity: 0.3,
-                shadowRadius: 16,
-                elevation: 20,
-              }),
-        },
-        tabBarActiveTintColor: colors.primary,
-        tabBarInactiveTintColor: colors.mutedForeground,
-        tabBarLabelStyle: {
-          fontSize: 11,
-          fontFamily: 'Nunito_700Bold',
-          marginTop: 2,
-        },
-      }}
-    >
-      <Tabs.Screen
-        name="index"
-        options={{
-          title: 'Matches',
-          tabBarIcon: ({ color, focused }) => (
-            <CalendarDays size={23} color={color} strokeWidth={focused ? 2.5 : 2} />
-          ),
-        }}
-      />
-      <Tabs.Screen
-        name="bracket"
-        options={{
-          title: 'Bracket',
-          tabBarIcon: ({ color, focused }) => (
-            <Trophy size={23} color={color} strokeWidth={focused ? 2.5 : 2} />
-          ),
-        }}
-      />
-      <Tabs.Screen
-        name="groups"
-        options={{
-          title: 'Groups',
-          tabBarIcon: ({ color, focused }) => (
-            <LayoutGrid size={23} color={color} strokeWidth={focused ? 2.5 : 2} />
-          ),
-        }}
-      />
-      <Tabs.Screen
-        name="teams"
-        options={{
-          title: 'Teams',
-          tabBarIcon: ({ color, focused }) => (
-            <Shield size={23} color={color} strokeWidth={focused ? 2.5 : 2} />
-          ),
-        }}
-      />
-    </Tabs>
+    <NativeTabs tintColor={accent} minimizeBehavior="onScrollDown">
+      <NativeTabs.Trigger name="index">
+        <Label>Matches</Label>
+        <Icon src={<VectorIcon family={MaterialCommunityIcons} name="soccer-field" />} />
+      </NativeTabs.Trigger>
+      <NativeTabs.Trigger name="bracket">
+        <Label>Bracket</Label>
+        <Icon sf={{ default: 'trophy', selected: 'trophy.fill' }} />
+      </NativeTabs.Trigger>
+      <NativeTabs.Trigger name="news">
+        <Label>News</Label>
+        <Icon sf={{ default: 'newspaper', selected: 'newspaper.fill' }} />
+      </NativeTabs.Trigger>
+      <NativeTabs.Trigger name="teams">
+        <Label>Teams</Label>
+        <Icon sf={{ default: 'shield', selected: 'shield.fill' }} />
+      </NativeTabs.Trigger>
+    </NativeTabs>
   );
 }

@@ -39,6 +39,7 @@ packages:
   - lib/*
   - lib/integrations/*
   - scripts
+  - services/*
 
 catalog:
   '@replit/vite-plugin-cartographer': ^0.5.21
@@ -158,3 +159,9 @@ overrides:
   # drizzle-kit uses esbuild internally on an older version that's vulnerable, this overrides it
   "@esbuild-kit/esm-loader": "npm:tsx@^4.21.0"
   esbuild: "0.27.3"
+
+allowBuilds:
+  # Push worker's SQLite registry. Left unbuilt for now (nothing imports it until
+  # the push build agent lands); flip to `true` to compile the native binary.
+  better-sqlite3: false
+  esbuild: true

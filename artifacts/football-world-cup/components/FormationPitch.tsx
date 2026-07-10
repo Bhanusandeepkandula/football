@@ -21,7 +21,10 @@ interface PlayerDotProps {
 }
 
 function PlayerDot({ player, color, size = 36 }: PlayerDotProps) {
-  const bgColor = `#${color}`;
+  // `color` may arrive with or without a leading '#' (ESPN team colours are raw
+  // hex like "003DA5"; props/fallbacks already include the '#'). Normalise so we
+  // never emit an invalid "##003DA5".
+  const bgColor = color?.startsWith('#') ? color : `#${color}`;
   return (
     <View style={styles.playerWrapper}>
       <View
@@ -60,11 +63,21 @@ function PlayerRow({ players, color }: { players: MatchPlayer[]; color: string }
   );
 }
 
-export function FormationPitch({ home, away }: { home: MatchTeamLineup; away: MatchTeamLineup }) {
+export function FormationPitch({
+  home,
+  away,
+  homeColor: homeColorProp,
+  awayColor: awayColorProp,
+}: {
+  home: MatchTeamLineup;
+  away: MatchTeamLineup;
+  homeColor?: string;
+  awayColor?: string;
+}) {
   const homeGroups = groupByPosition(home.starters);
   const awayGroups = groupByPosition(away.starters);
-  const homeColor = home.team.color || '003DA5';
-  const awayColor = away.team.color || 'C8102E';
+  const homeColor = homeColorProp ?? home.team.color ?? '#003DA5';
+  const awayColor = awayColorProp ?? away.team.color ?? '#C8102E';
 
   return (
     <View style={[styles.pitch, { width: PITCH_W, height: PITCH_H }]}>
@@ -110,7 +123,7 @@ const MARKING = 'rgba(255,255,255,0.25)';
 const styles = StyleSheet.create({
   pitch: {
     backgroundColor: '#1A7A4A',
-    borderRadius: 12,
+    borderRadius: 11,
     overflow: 'hidden',
     alignSelf: 'center',
     borderWidth: 2,
