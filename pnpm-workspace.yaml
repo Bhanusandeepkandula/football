@@ -71,6 +71,7 @@ autoInstallPeers: false
 
 onlyBuiltDependencies:
   - '@swc/core'
+  - better-sqlite3
   - esbuild
   - msw
   - unrs-resolver
@@ -161,7 +162,8 @@ overrides:
   esbuild: "0.27.3"
 
 allowBuilds:
-  # Push worker's SQLite registry. Left unbuilt for now (nothing imports it until
-  # the push build agent lands); flip to `true` to compile the native binary.
-  better-sqlite3: false
+  # Push worker's SQLite registry. The push agent has landed (src/push/registry.ts
+  # loads it via createRequire and falls back to a JSON store if it can't); the
+  # native binary is built on install.
+  better-sqlite3: true
   esbuild: true

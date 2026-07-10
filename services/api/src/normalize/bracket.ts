@@ -146,7 +146,9 @@ function toSide(c: RawCompetitor | undefined): MatchSide {
     team: toTeam(c?.team),
     score: c?.score != null ? String(c.score) : '',
     shootoutScore: typeof c?.shootoutScore === 'number' ? c.shootoutScore : undefined,
-    winner: typeof c?.winner === 'boolean' ? c.winner : undefined,
+    // `winner` is resolved once the match is finished (see toMatchSummary) so a
+    // penalty/aggregate winner is marked even when the goal scoreline is level.
+    winner: undefined,
     record: c?.records?.find((r) => r.summary)?.summary ?? undefined,
   };
 }
@@ -170,22 +172,45 @@ function resultSuffixOf(ev: RawEvent, shootout: Shootout | null): string {
 function toMatchSummary(ev: RawEvent, league: LeagueRef, roundName: string): MatchSummary {
   const comp = ev.competitions?.[0];
   const comps = comp?.competitors ?? [];
-  const home = comps.find((c) => c.homeAway === 'home') ?? comps[0];
-  const away = comps.find((c) => c.homeAway === 'away') ?? comps[1];
-  const shootout = shootoutOf(home, away);
-  const suffix = resultSuffixOf(ev, shootout);
+  const homeRaw = comps.find((c) => c.homeAway === 'home') ?? comps[0];
+  const awayRaw = comps.find((c) => c.homeAway === 'away') ?? comps[1];
+  const shootout = shootoutOf(homeRaw, awayRaw);
+  const status = mapStatus(ev);
+  const home = toSide(homeRaw);
+  const away = toSide(awayRaw);
+
+  // Resolve the winner once the tie is decided. A penalty shootout overrides a
+  // level regulation scoreline; a level score with no shootout (a two-leg tie
+  // decided on aggregate) falls back to ESPN's explicit `winner` flag.
+  if (status.isFinished) {
+    if (shootout) {
+      home.winner = shootout.home > shootout.away;
+      away.winner = shootout.away > shootout.home;
+    } else {
+      const hs = Number(home.score);
+      const as = Number(away.score);
+      if (home.score !== '' && away.score !== '' && Number.isFinite(hs) && Number.isFinite(as) && hs !== as) {
+        home.winner = hs > as;
+        away.winner = as > hs;
+      } else {
+        if (homeRaw?.winner === true) home.winner = true;
+        if (awayRaw?.winner === true) away.winner = true;
+      }
+    }
+  }
+
   return {
     id: ev.id != null ? String(ev.id) : '',
     league,
     date: ev.date ?? '',
     round: roundName || undefined,
-    status: mapStatus(ev),
-    home: toSide(home),
-    away: toSide(away),
+    status,
+    home,
+    away,
     venue: comp?.venue?.fullName || undefined,
     city: comp?.venue?.address?.city || undefined,
     shootout,
-    resultSuffix: suffix || undefined,
+    resultSuffix: resultSuffixOf(ev, shootout) || undefined,
   };
 }
 

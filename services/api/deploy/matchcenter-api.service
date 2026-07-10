@@ -1,0 +1,80 @@
+# MatchCenter API — systemd unit for an Oracle Cloud Always-Free VM.
+# (Prefer the AMD / x64 "micro" shape: production is a plain `tsc` build +
+#  `node dist/server.js`, so it needs no native esbuild/rollup binaries.)
+#
+# Install:
+#   sudo useradd --system --home-dir /opt/matchcenter-api --shell /usr/sbin/nologin matchcenter
+#   sudo cp services/api/deploy/matchcenter-api.service /etc/systemd/system/
+#   sudo systemctl daemon-reload
+#   sudo systemctl enable --now matchcenter-api
+#   sudo journalctl -u matchcenter-api -f          # structured pino logs
+#
+# Liveness / readiness is  GET /health → { ok, service, uptime, pushEnabled }.
+# systemd keeps the process alive (Restart=always); point an external uptime
+# monitor / load-balancer health check at /health for HTTP-level readiness.
+
+[Unit]
+Description=MatchCenter API (ESPN proxy: REST + SSE + WebSocket, + APNs / Live-Activity push)
+Documentation=file:/opt/matchcenter-api/README.md
+After=network-online.target
+Wants=network-online.target
+# Auto-restart circuit breaker (systemd v230+ keeps these in [Unit]).
+StartLimitIntervalSec=60
+StartLimitBurst=5
+
+[Service]
+Type=simple
+
+# Unprivileged, dedicated service account (created in the install steps above).
+User=matchcenter
+Group=matchcenter
+
+# Self-contained deploy tree produced by:
+#   corepack pnpm --filter @matchcenter/api build
+#   corepack pnpm --filter @matchcenter/api deploy --prod /opt/matchcenter-api
+# `deploy` resolves the workspace catalog into a standalone node_modules, so the
+# monorepo is NOT needed at runtime — only dist/ + node_modules/ + .env.
+WorkingDirectory=/opt/matchcenter-api
+ExecStart=/usr/bin/node dist/server.js
+
+# Belt-and-suspenders defaults; the EnvironmentFile below overrides them (systemd
+# applies these in order, last-wins), and the app itself also defaults them.
+Environment=NODE_ENV=production
+Environment=PORT=8080
+# Config + secrets (PORT, API_TOKEN, APNS_*). Keep this file 0640, root:matchcenter.
+# Push starts ONLY when APNS_KEY_P8 + APNS_KEY_ID + APNS_TEAM_ID are all set;
+# otherwise the service runs in proxy-only mode (REST + SSE + WS).
+EnvironmentFile=/opt/matchcenter-api/.env
+
+# Crash-loop-resilient auto-restart.
+Restart=always
+RestartSec=3
+
+# server.ts handles SIGTERM for graceful shutdown — give SSE/WS clients time to drain.
+KillSignal=SIGTERM
+TimeoutStopSec=15
+
+# Writable state for the push registry SQLite DB (better-sqlite3). systemd creates
+# and chowns /var/lib/matchcenter-api to the service user; the push worker should
+# open its *.sqlite there (WorkingDirectory is read-only under ProtectSystem=strict).
+StateDirectory=matchcenter-api
+StateDirectoryMode=0750
+
+# ── Hardening ──
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/var/lib/matchcenter-api
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictSUIDSGID=true
+RestrictNamespaces=true
+LockPersonality=true
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
+# NOTE: keep W^X off — V8's JIT needs writable+executable pages or Node won't start.
+MemoryDenyWriteExecute=false
+
+[Install]
+WantedBy=multi-user.target

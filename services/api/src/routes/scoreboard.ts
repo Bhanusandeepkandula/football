@@ -24,13 +24,31 @@ const QuerySchema = z.object({
     .optional(),
 });
 
+// ESPN's `season.type` is sometimes a bare number and sometimes an object
+// ({ type, name, ... }); `season.name`/`displayName` may also carry the label.
+interface EspnSeason {
+  year?: number;
+  type?: number | { type?: number; name?: string };
+  name?: string;
+  displayName?: string;
+}
+
 interface EspnScoreboard {
   events?: unknown[];
-  leagues?: {
-    name?: string;
-    abbreviation?: string;
-    season?: { year?: number; type?: number; name?: string };
-  }[];
+  leagues?: { name?: string; abbreviation?: string; season?: EspnSeason }[];
+}
+
+function normalizeSeason(raw: EspnSeason | undefined): { year: number; type?: number; name?: string } | undefined {
+  if (!raw || typeof raw.year !== 'number') return undefined;
+  const type =
+    typeof raw.type === 'number'
+      ? raw.type
+      : typeof raw.type === 'object' && typeof raw.type?.type === 'number'
+        ? raw.type.type
+        : undefined;
+  const name =
+    (typeof raw.type === 'object' ? raw.type?.name : undefined) ?? raw.name ?? raw.displayName;
+  return { year: raw.year, type, name };
 }
 
 export function registerScoreboard(app: Hono): void {
@@ -50,16 +68,10 @@ export function registerScoreboard(app: Hono): void {
         const ref = leagueRef(league, espnLeague);
         const matches = (data?.events ?? []).map((ev) => toMatchSummary(ev, ref));
 
-        const seasonYear = espnLeague?.season?.year;
-        const season =
-          typeof seasonYear === 'number'
-            ? { year: seasonYear, type: espnLeague?.season?.type, name: espnLeague?.season?.name }
-            : undefined;
-
         return ScoreboardSchema.parse({
           league: ref,
           date: dates ?? undefined,
-          season,
+          season: normalizeSeason(espnLeague?.season),
           matches,
         });
       });
