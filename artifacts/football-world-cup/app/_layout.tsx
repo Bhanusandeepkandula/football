@@ -66,17 +66,17 @@ function RootLayoutNav() {
       }}
     >
       <Stack.Screen name="(tabs)" options={{ headerShown: false, animation: 'none' }} />
-      {/* Match & team detail open as sheets/overlays too — a consistent
-          drag-to-dismiss modal for match/player/team everywhere in the app. */}
+      {/* Primary pages — opened from a main list (home matches, Teams tab):
+          full-page push, like before. Secondary drill-downs use the *-sheet
+          routes below. */}
       <Stack.Screen
         name="match/[id]"
         options={{
           headerShown: false,
-          presentation: 'formSheet',
+          presentation: 'card',
+          animation: 'slide_from_right',
+          animationDuration: 260,
           gestureEnabled: true,
-          sheetGrabberVisible: true,
-          sheetAllowedDetents: [0.94],
-          sheetCornerRadius: 22,
           contentStyle: { backgroundColor: colors.background },
         }}
       />
@@ -84,11 +84,10 @@ function RootLayoutNav() {
         name="team/[id]"
         options={{
           headerShown: false,
-          presentation: 'formSheet',
+          presentation: 'card',
+          animation: 'slide_from_right',
+          animationDuration: 260,
           gestureEnabled: true,
-          sheetGrabberVisible: true,
-          sheetAllowedDetents: [0.94],
-          sheetCornerRadius: 22,
           contentStyle: { backgroundColor: colors.background },
         }}
       />
@@ -111,6 +110,20 @@ function RootLayoutNav() {
           (the full-page team route stays for the Teams tab / standings). */}
       <Stack.Screen
         name="team-sheet/[id]"
+        options={{
+          headerShown: false,
+          presentation: 'formSheet',
+          gestureEnabled: true,
+          sheetGrabberVisible: true,
+          sheetAllowedDetents: [0.94],
+          sheetCornerRadius: 22,
+          contentStyle: { backgroundColor: colors.background },
+        }}
+      />
+      {/* Match detail as a sheet — opened as a secondary drill-down (e.g. a
+          fixture inside a team page). The Matches home stays the full page. */}
+      <Stack.Screen
+        name="match-sheet/[id]"
         options={{
           headerShown: false,
           presentation: 'formSheet',

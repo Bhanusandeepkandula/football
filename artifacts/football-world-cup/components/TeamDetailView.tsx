@@ -280,7 +280,7 @@ function FormStrip({ form, colors }: { form: FormResult[]; colors: Colors }) {
             <TouchableOpacity
               key={f.matchId}
               activeOpacity={0.8}
-              onPress={() => router.push(`/match/${f.matchId}` as any)}
+              onPress={() => router.push(`/match-sheet/${f.matchId}` as any)}
               style={styles.formPill}
             >
               <View style={[styles.formBadge, { backgroundColor: bg }]}>
@@ -307,7 +307,7 @@ function NextMatchCard({ match, colors }: { match: NextMatch; colors: Colors }) 
       <SectionTitle title="Next Match" colors={colors} />
       <TouchableOpacity
         activeOpacity={0.85}
-        onPress={() => router.push(`/match/${match.id}` as any)}
+        onPress={() => router.push(`/match-sheet/${match.id}` as any)}
         style={[styles.nextCard, { backgroundColor: colors.card, borderColor: colors.border }]}
       >
         <View style={styles.nextTop}>
@@ -533,7 +533,7 @@ function FixturesTab({ fixtures, colors }: { fixtures: TeamFixture[]; colors: Co
           <TouchableOpacity
             key={f.id}
             activeOpacity={0.7}
-            onPress={() => router.push(`/match/${f.id}` as any)}
+            onPress={() => router.push(`/match-sheet/${f.id}` as any)}
             style={[styles.fixtureCard, { backgroundColor: colors.card, borderColor: colors.border }]}
           >
             <View style={styles.fixtureTop}>

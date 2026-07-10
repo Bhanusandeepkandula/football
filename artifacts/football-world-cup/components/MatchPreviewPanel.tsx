@@ -192,7 +192,7 @@ function RecentFormSection({
 
         <TouchableOpacity
           activeOpacity={0.75}
-          onPress={() => router.push(`/team/${activeTeam.id}`)}
+          onPress={() => router.push(`/team-sheet/${activeTeam.id}` as any)}
           style={styles.fullSchedule}
         >
           <Text style={[styles.fullScheduleText, { color: colors.primary }]}>Full Schedule</Text>
